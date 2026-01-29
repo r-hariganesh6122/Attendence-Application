@@ -142,26 +142,130 @@ export default function AdminDashboard({ user, onLogout }) {
     return report;
   };
 
-  // Export to CSV
-  const exportToCSV = () => {
+  // Print Absence Report
+  const printReport = () => {
     const report = generateReport();
-    let csv = "Department,Class,Roll No,Student Name,Reason\n";
+    let printContent = `
+      <html>
+        <head>
+          <title>Absence Report - ${new Date().toLocaleDateString()}</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              margin: 20px;
+              line-height: 1.6;
+            }
+            h1 {
+              text-align: center;
+              color: #333;
+              margin-bottom: 10px;
+            }
+            .date {
+              text-align: center;
+              color: #666;
+              margin-bottom: 20px;
+              font-size: 14px;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 30px;
+            }
+            th {
+              background-color: #34495e;
+              color: white;
+              padding: 12px;
+              text-align: left;
+              border: 1px solid #333;
+              font-weight: bold;
+            }
+            td {
+              padding: 10px 12px;
+              border: 1px solid #bbb;
+              text-align: left;
+            }
+            tr:nth-child(even) {
+              background-color: #f9f9f9;
+            }
+            tr:hover {
+              background-color: #ecf0f1;
+            }
+            .department-header {
+              background-color: #000000;
+              color: black;
+              font-size: 24px;
+              font-weight: 900;
+              padding: 15px;
+              margin-top: 20px;
+              margin-bottom: 10px;
+            }
+            .class-header {
+              background-color: #7f8c8d;
+              color: white;
+              font-size: 14px;
+              font-weight: bold;
+              padding: 8px 12px;
+              margin-bottom: 5px;
+            }
+            @media print {
+              body { margin: 10px; }
+              table { page-break-inside: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Absence Report</h1>
+          <div class="date">Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
+    `;
 
     Object.entries(report).forEach(([deptName, deptClasses]) => {
+      printContent += `<div class="department-header">${deptName}</div>`;
+
       Object.entries(deptClasses).forEach(([className, absences]) => {
-        absences.forEach((student) => {
-          csv += `${deptName},${className},${student.rollNo},${student.name},${student.reason}\n`;
-        });
+        printContent += `<div class="class-header">${className}</div>`;
+
+        if (absences.length > 0) {
+          printContent += `
+            <table>
+              <thead>
+                <tr>
+                  <th>Roll No</th>
+                  <th>Student Name</th>
+                  <th>Reason for Absence</th>
+                </tr>
+              </thead>
+              <tbody>
+          `;
+
+          absences.forEach((student) => {
+            printContent += `
+              <tr>
+                <td>${student.rollNo}</td>
+                <td>${student.name}</td>
+                <td>${student.reason}</td>
+              </tr>
+            `;
+          });
+
+          printContent += `
+              </tbody>
+            </table>
+          `;
+        } else {
+          printContent += `<p style="color: #27ae60; padding: 10px;">No absences</p>`;
+        }
       });
     });
 
-    // Download CSV
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `absence_report_${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
+    printContent += `
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "", "width=900,height=600");
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
   };
 
   const report = generateReport();
@@ -520,8 +624,8 @@ export default function AdminDashboard({ user, onLogout }) {
         {activeTab === "report" && (
           <div className="admin-section">
             <h2>Absence Report</h2>
-            <button onClick={exportToCSV} className="export-btn">
-              Export to CSV
+            <button onClick={printReport} className="export-btn">
+              Print Report
             </button>
 
             <div className="report-container">
