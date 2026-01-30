@@ -1,114 +1,70 @@
-"use client";
-
 import { useState } from "react";
 import {
   mockData,
-  getClassesByDepartment,
-  getStudentsByClass,
+  getStudentsByDepartment,
   getDepartmentById,
-  getCollegeById,
   getTeacherById,
 } from "../../lib/mockData";
 import "../attendance.css";
 
 export default function AdminDashboard({ user, onLogout }) {
-  const [activeTab, setActiveTab] = useState("colleges");
-  const [colleges, setColleges] = useState(mockData.colleges);
+  const [activeTab, setActiveTab] = useState("management");
+  const [selectedProgram, setSelectedProgram] = useState("BE");
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
+  const [programs, setPrograms] = useState(mockData.programs);
   const [departments, setDepartments] = useState(mockData.departments);
-  const [classes, setClasses] = useState(mockData.classes);
   const [teachers, setTeachers] = useState(mockData.teachers);
   const [assignments, setAssignments] = useState(
-    mockData.teacherClassAssignments,
+    mockData.teacherDepartmentAssignments,
   );
 
   // Form states for adding new items
-  const [newCollege, setNewCollege] = useState({ name: "", location: "" });
-  const [newDepartment, setNewDepartment] = useState({
+  const [newTeacher, setNewTeacher] = useState({
     name: "",
-    collegeId: colleges[0]?.id || "",
-  });
-  const [newClass, setNewClass] = useState({
-    name: "",
+    email: "",
+    phone: "",
     departmentId: departments[0]?.id || "",
-    semester: "1",
-    strength: "",
-  });
-  const [newAssignment, setNewAssignment] = useState({
-    teacherId: teachers[0]?.id || "",
-    classId: classes[0]?.id || "",
   });
 
-  // College Management
-  const addCollege = () => {
-    if (newCollege.name && newCollege.location) {
-      const college = {
-        id: `col-${Date.now()}`,
-        ...newCollege,
+  // Search state for teachers
+  const [teacherSearch, setTeacherSearch] = useState("");
+  const [selectedTeacherToRemove, setSelectedTeacherToRemove] = useState("");
+
+  // Teacher Management
+  const addTeacher = () => {
+    if (
+      newTeacher.name &&
+      newTeacher.email &&
+      newTeacher.phone &&
+      newTeacher.departmentId
+    ) {
+      const teacher = {
+        id: `teach-${Date.now()}`,
+        ...newTeacher,
       };
-      setColleges([...colleges, college]);
-      setNewCollege({ name: "", location: "" });
-    }
-  };
-
-  const deleteCollege = (collegeId) => {
-    setColleges(colleges.filter((c) => c.id !== collegeId));
-  };
-
-  // Department Management
-  const addDepartment = () => {
-    if (newDepartment.name && newDepartment.collegeId) {
-      const dept = {
-        id: `dept-${Date.now()}`,
-        ...newDepartment,
-      };
-      setDepartments([...departments, dept]);
-      setNewDepartment({ name: "", collegeId: colleges[0]?.id || "" });
-    }
-  };
-
-  const deleteDepartment = (deptId) => {
-    setDepartments(departments.filter((d) => d.id !== deptId));
-  };
-
-  // Class Management
-  const addClass = () => {
-    if (newClass.name && newClass.departmentId && newClass.strength) {
-      const cls = {
-        id: `class-${Date.now()}`,
-        ...newClass,
-        strength: parseInt(newClass.strength),
-      };
-      setClasses([...classes, cls]);
-      setNewClass({
+      setTeachers([...teachers, teacher]);
+      setNewTeacher({
         name: "",
+        email: "",
+        phone: "",
         departmentId: departments[0]?.id || "",
-        semester: "1",
-        strength: "",
       });
     }
   };
 
-  const deleteClass = (classId) => {
-    setClasses(classes.filter((c) => c.id !== classId));
+  const deleteTeacher = (teacherId) => {
+    setTeachers(teachers.filter((t) => t.id !== teacherId));
+    // Also remove from assignments
+    setAssignments(assignments.filter((a) => a.teacherId !== teacherId));
   };
 
-  // Teacher Assignment
-  const addAssignment = () => {
-    if (newAssignment.teacherId && newAssignment.classId) {
-      const assignment = {
-        id: `assign-${Date.now()}`,
-        ...newAssignment,
-      };
-      setAssignments([...assignments, assignment]);
-      setNewAssignment({
-        teacherId: teachers[0]?.id || "",
-        classId: classes[0]?.id || "",
+  const getTeacherClasses = (teacherId) => {
+    return assignments
+      .filter((a) => a.teacherId === teacherId)
+      .map((a) => {
+        const dept = departments.find((d) => d.id === a.departmentId);
+        return dept?.name || "Unknown";
       });
-    }
-  };
-
-  const deleteAssignment = (assignmentId) => {
-    setAssignments(assignments.filter((a) => a.id !== assignmentId));
   };
 
   // Generate Attendance Report
@@ -117,25 +73,17 @@ export default function AdminDashboard({ user, onLogout }) {
 
     // Group by department
     departments.forEach((dept) => {
-      const deptClasses = classes.filter((c) => c.departmentId === dept.id);
-      if (deptClasses.length > 0) {
-        report[dept.name] = {};
-
-        // Group by class within department
-        deptClasses.forEach((cls) => {
-          const students = mockData.students.filter(
-            (s) => s.classId === cls.id,
-          );
-          // Simulate some absences
-          const absences = students
-            .filter((_, idx) => idx % 3 === 0)
-            .map((s) => ({
-              name: s.name,
-              rollNo: s.rollNo,
-              reason: "Medical leave",
-            }));
-          report[dept.name][cls.name] = absences;
-        });
+      const students = getStudentsByDepartment(dept.id);
+      if (students.length > 0) {
+        // Simulate some absences
+        const absences = students
+          .filter((_, idx) => idx % 3 === 0)
+          .map((s) => ({
+            name: s.name,
+            rollNo: s.rollNo,
+            reason: "Medical leave",
+          }));
+        report[dept.name] = absences;
       }
     });
 
@@ -199,14 +147,6 @@ export default function AdminDashboard({ user, onLogout }) {
               margin-top: 20px;
               margin-bottom: 10px;
             }
-            .class-header {
-              background-color: #7f8c8d;
-              color: white;
-              font-size: 14px;
-              font-weight: bold;
-              padding: 8px 12px;
-              margin-bottom: 5px;
-            }
             @media print {
               body { margin: 10px; }
               table { page-break-inside: avoid; }
@@ -218,43 +158,39 @@ export default function AdminDashboard({ user, onLogout }) {
           <div class="date">Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
     `;
 
-    Object.entries(report).forEach(([deptName, deptClasses]) => {
+    Object.entries(report).forEach(([deptName, absences]) => {
       printContent += `<div class="department-header">${deptName}</div>`;
 
-      Object.entries(deptClasses).forEach(([className, absences]) => {
-        printContent += `<div class="class-header">${className}</div>`;
-
-        if (absences.length > 0) {
-          printContent += `
-            <table>
-              <thead>
-                <tr>
-                  <th>Roll No</th>
-                  <th>Student Name</th>
-                  <th>Reason for Absence</th>
-                </tr>
-              </thead>
-              <tbody>
-          `;
-
-          absences.forEach((student) => {
-            printContent += `
+      if (absences.length > 0) {
+        printContent += `
+          <table>
+            <thead>
               <tr>
-                <td>${student.rollNo}</td>
-                <td>${student.name}</td>
-                <td>${student.reason}</td>
+                <th>Roll No</th>
+                <th>Student Name</th>
+                <th>Reason for Absence</th>
               </tr>
-            `;
-          });
+            </thead>
+            <tbody>
+        `;
 
+        absences.forEach((student) => {
           printContent += `
-              </tbody>
-            </table>
+            <tr>
+              <td>${student.rollNo}</td>
+              <td>${student.name}</td>
+              <td>${student.reason}</td>
+            </tr>
           `;
-        } else {
-          printContent += `<p style="color: #27ae60; padding: 10px;">No absences</p>`;
-        }
-      });
+        });
+
+        printContent += `
+            </tbody>
+          </table>
+        `;
+      } else {
+        printContent += `<p style="color: #27ae60; padding: 10px;">No absences</p>`;
+      }
     });
 
     printContent += `
@@ -269,14 +205,6 @@ export default function AdminDashboard({ user, onLogout }) {
   };
 
   const report = generateReport();
-  const getCollegeName = (collegeId) =>
-    colleges.find((c) => c.id === collegeId)?.name || "Unknown";
-  const getDeptName = (deptId) =>
-    departments.find((d) => d.id === deptId)?.name || "Unknown";
-  const getClassName = (classId) =>
-    classes.find((c) => c.id === classId)?.name || "Unknown";
-  const getTeacherName = (teacherId) =>
-    teachers.find((t) => t.id === teacherId)?.name || "Unknown";
 
   return (
     <div className="attendance-container">
@@ -293,28 +221,16 @@ export default function AdminDashboard({ user, onLogout }) {
 
         <div className="admin-nav">
           <button
-            className={`nav-btn ${activeTab === "colleges" ? "active" : ""}`}
-            onClick={() => setActiveTab("colleges")}
+            className={`nav-btn ${activeTab === "management" ? "active" : ""}`}
+            onClick={() => setActiveTab("management")}
           >
-            Colleges
+            Management
           </button>
           <button
-            className={`nav-btn ${activeTab === "departments" ? "active" : ""}`}
-            onClick={() => setActiveTab("departments")}
+            className={`nav-btn ${activeTab === "teachers" ? "active" : ""}`}
+            onClick={() => setActiveTab("teachers")}
           >
-            Departments
-          </button>
-          <button
-            className={`nav-btn ${activeTab === "classes" ? "active" : ""}`}
-            onClick={() => setActiveTab("classes")}
-          >
-            Classes
-          </button>
-          <button
-            className={`nav-btn ${activeTab === "assignments" ? "active" : ""}`}
-            onClick={() => setActiveTab("assignments")}
-          >
-            Teacher Assignments
+            Teachers
           </button>
           <button
             className={`nav-btn ${activeTab === "report" ? "active" : ""}`}
@@ -324,298 +240,311 @@ export default function AdminDashboard({ user, onLogout }) {
           </button>
         </div>
 
-        {/* Colleges Tab */}
-        {activeTab === "colleges" && (
+        {/* Management Tab */}
+        {activeTab === "management" && (
           <div className="admin-section">
-            <h2>Manage Colleges</h2>
-            <div className="form-section">
-              <h3>Add New College</h3>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>College Name</label>
-                  <input
-                    type="text"
-                    value={newCollege.name}
-                    onChange={(e) =>
-                      setNewCollege({ ...newCollege, name: e.target.value })
-                    }
-                    placeholder="Enter college name"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Location</label>
-                  <input
-                    type="text"
-                    value={newCollege.location}
-                    onChange={(e) =>
-                      setNewCollege({ ...newCollege, location: e.target.value })
-                    }
-                    placeholder="Enter location"
-                  />
-                </div>
+            <h2>Management</h2>
+
+            {/* Programs Navigation */}
+            <div className="programs-nav">
+              <h3>Programs</h3>
+              <div className="program-buttons">
+                {programs.map((program) => (
+                  <button
+                    key={program.id}
+                    className={`program-btn ${selectedProgram === program.name ? "active" : ""}`}
+                    onClick={() => {
+                      setSelectedProgram(program.name);
+                      setSelectedDepartment(null);
+                    }}
+                  >
+                    {program.name}
+                  </button>
+                ))}
               </div>
-              <button onClick={addCollege} className="add-btn">
-                Add College
-              </button>
             </div>
 
-            <div className="data-list">
-              <div className="list-header">
-                <div>College Name</div>
-                <div>Location</div>
-                <div>Action</div>
-              </div>
-              {colleges.map((college) => (
-                <div key={college.id} className="list-item">
-                  <div>{college.name}</div>
-                  <div>{college.location}</div>
-                  <button
-                    onClick={() => deleteCollege(college.id)}
-                    className="delete-btn"
-                  >
-                    Delete
-                  </button>
+            {/* Departments Navigation */}
+            {selectedProgram && (
+              <div className="departments-nav">
+                <h3>Departments - {selectedProgram}</h3>
+                <div className="department-buttons">
+                  {departments
+                    .filter((d) => d.program === selectedProgram)
+                    .map((dept) => (
+                      <button
+                        key={dept.id}
+                        className={`dept-btn ${selectedDepartment?.id === dept.id ? "active" : ""}`}
+                        onClick={() => setSelectedDepartment(dept)}
+                      >
+                        {dept.name}
+                      </button>
+                    ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {/* Classes Navigation (if applicable) */}
+            {selectedDepartment && selectedDepartment.classes.length > 0 && (
+              <div className="classes-nav">
+                <h3>Classes - {selectedDepartment.name}</h3>
+                <div className="class-buttons">
+                  {selectedDepartment.classes.map((classItem) => (
+                    <button
+                      key={classItem}
+                      className="class-btn"
+                      onClick={() => {
+                        // Handle class selection if needed later
+                      }}
+                    >
+                      Class {classItem}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Department Details */}
+            {selectedDepartment && (
+              <div className="department-details">
+                <h3>Department: {selectedDepartment.name}</h3>
+                <div style={{ marginTop: "15px" }}>
+                  <p>
+                    <strong>Program:</strong> {selectedDepartment.program}
+                  </p>
+                  {selectedDepartment.classes.length > 0 && (
+                    <p>
+                      <strong>Classes:</strong>{" "}
+                      {selectedDepartment.classes.join(", ")}
+                    </p>
+                  )}
+                  <p>
+                    <strong>Total Students:</strong>{" "}
+                    {getStudentsByDepartment(selectedDepartment.id)?.length ||
+                      0}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Departments Tab */}
-        {activeTab === "departments" && (
+        {/* Teachers Tab */}
+        {activeTab === "teachers" && (
           <div className="admin-section">
-            <h2>Manage Departments</h2>
-            <div className="form-section">
-              <h3>Add New Department</h3>
+            <h2>Teachers</h2>
+
+            {/* Search Teachers */}
+            <div className="search-section" style={{ marginBottom: "20px" }}>
+              <input
+                type="text"
+                value={teacherSearch}
+                onChange={(e) => setTeacherSearch(e.target.value)}
+                placeholder="Search teachers by name, email, or department..."
+                className="search-input"
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "4px",
+                  border: "1px solid #ddd",
+                  fontSize: "14px",
+                }}
+              />
+            </div>
+
+            {/* Teacher List */}
+            <div className="data-list">
+              <div className="list-header">
+                <div>Teacher Name</div>
+                <div>Email</div>
+                <div>Phone</div>
+                <div>Department</div>
+              </div>
+              {teachers
+                .filter((teacher) => {
+                  const search = teacherSearch.toLowerCase();
+                  const dept = departments.find(
+                    (d) => d.id === teacher.departmentId,
+                  );
+                  return (
+                    teacher.name.toLowerCase().includes(search) ||
+                    teacher.email.toLowerCase().includes(search) ||
+                    dept?.name.toLowerCase().includes(search)
+                  );
+                })
+                .map((teacher) => (
+                  <div key={teacher.id} className="list-item">
+                    <div>{teacher.name}</div>
+                    <div>{teacher.email}</div>
+                    <div>{teacher.phone}</div>
+                    <div>
+                      {departments.find((d) => d.id === teacher.departmentId)
+                        ?.name || "Unknown"}
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            {/* Add New Teacher - At the bottom */}
+            <div className="form-section" style={{ marginTop: "30px" }}>
+              <h3>Add New Teacher</h3>
               <div className="form-grid">
                 <div className="form-group">
-                  <label>Department Name</label>
+                  <label>Teacher Name</label>
                   <input
                     type="text"
-                    value={newDepartment.name}
+                    value={newTeacher.name}
                     onChange={(e) =>
-                      setNewDepartment({
-                        ...newDepartment,
+                      setNewTeacher({
+                        ...newTeacher,
                         name: e.target.value,
                       })
                     }
-                    placeholder="Enter department name"
+                    placeholder="Enter teacher name"
                   />
                 </div>
                 <div className="form-group">
-                  <label>College</label>
-                  <select
-                    value={newDepartment.collegeId}
+                  <label>Email</label>
+                  <input
+                    type="email"
+                    value={newTeacher.email}
                     onChange={(e) =>
-                      setNewDepartment({
-                        ...newDepartment,
-                        collegeId: e.target.value,
+                      setNewTeacher({
+                        ...newTeacher,
+                        email: e.target.value,
                       })
                     }
-                  >
-                    {colleges.map((col) => (
-                      <option key={col.id} value={col.id}>
-                        {col.name}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Enter email"
+                  />
                 </div>
-              </div>
-              <button onClick={addDepartment} className="add-btn">
-                Add Department
-              </button>
-            </div>
-
-            <div className="data-list">
-              <div className="list-header">
-                <div>Department Name</div>
-                <div>College</div>
-                <div>Action</div>
-              </div>
-              {departments.map((dept) => (
-                <div key={dept.id} className="list-item">
-                  <div>{dept.name}</div>
-                  <div>{getCollegeName(dept.collegeId)}</div>
-                  <button
-                    onClick={() => deleteDepartment(dept.id)}
-                    className="delete-btn"
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Classes Tab */}
-        {activeTab === "classes" && (
-          <div className="admin-section">
-            <h2>Manage Classes</h2>
-            <div className="form-section">
-              <h3>Add New Class</h3>
-              <div className="form-grid">
                 <div className="form-group">
-                  <label>Class Name</label>
+                  <label>Phone</label>
                   <input
                     type="text"
-                    value={newClass.name}
+                    value={newTeacher.phone}
                     onChange={(e) =>
-                      setNewClass({ ...newClass, name: e.target.value })
+                      setNewTeacher({
+                        ...newTeacher,
+                        phone: e.target.value,
+                      })
                     }
-                    placeholder="e.g., CSE-A"
+                    placeholder="Enter phone number"
                   />
                 </div>
                 <div className="form-group">
                   <label>Department</label>
                   <select
-                    value={newClass.departmentId}
+                    value={newTeacher.departmentId}
                     onChange={(e) =>
-                      setNewClass({
-                        ...newClass,
+                      setNewTeacher({
+                        ...newTeacher,
                         departmentId: e.target.value,
                       })
                     }
                   >
                     {departments.map((dept) => (
                       <option key={dept.id} value={dept.id}>
-                        {dept.name}
+                        {dept.name} - {dept.program}
                       </option>
                     ))}
                   </select>
-                </div>
-                <div className="form-group">
-                  <label>Semester</label>
-                  <select
-                    value={newClass.semester}
-                    onChange={(e) =>
-                      setNewClass({ ...newClass, semester: e.target.value })
-                    }
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                      <option key={sem} value={sem}>
-                        {sem}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>Strength</label>
-                  <input
-                    type="number"
-                    value={newClass.strength}
-                    onChange={(e) =>
-                      setNewClass({ ...newClass, strength: e.target.value })
-                    }
-                    placeholder="Number of students"
-                  />
                 </div>
               </div>
-              <button onClick={addClass} className="add-btn">
-                Add Class
+              <button onClick={addTeacher} className="add-btn">
+                Add Teacher
               </button>
             </div>
 
-            <div className="data-list">
-              <div className="list-header">
-                <div>Class Name</div>
-                <div>Department</div>
-                <div>Semester</div>
-                <div>Strength</div>
-                <div>Action</div>
-              </div>
-              {classes.map((cls) => (
-                <div key={cls.id} className="list-item">
-                  <div>{cls.name}</div>
-                  <div>{getDeptName(cls.departmentId)}</div>
-                  <div>{cls.semester}</div>
-                  <div>{cls.strength}</div>
-                  <button
-                    onClick={() => deleteClass(cls.id)}
-                    className="delete-btn"
+            {/* Remove Teacher Section */}
+            <div className="form-section" style={{ marginTop: "30px" }}>
+              <h3>Remove Teacher</h3>
+              <div className="form-group">
+                <label>Teacher Name to Remove</label>
+                <input
+                  type="text"
+                  value={selectedTeacherToRemove}
+                  onChange={(e) => setSelectedTeacherToRemove(e.target.value)}
+                  placeholder="Enter teacher name to remove"
+                />
+                {/* Matching teachers list */}
+                {selectedTeacherToRemove.trim() && (
+                  <div
+                    style={{
+                      marginTop: "10px",
+                      border: "1px solid #ddd",
+                      borderRadius: "4px",
+                      maxHeight: "200px",
+                      overflowY: "auto",
+                    }}
                   >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Teacher Assignments Tab */}
-        {activeTab === "assignments" && (
-          <div className="admin-section">
-            <h2>Assign Teachers to Classes</h2>
-            <div className="form-section">
-              <h3>Add Teacher Assignment</h3>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>Teacher</label>
-                  <select
-                    value={newAssignment.teacherId}
-                    onChange={(e) =>
-                      setNewAssignment({
-                        ...newAssignment,
-                        teacherId: e.target.value,
-                      })
-                    }
-                  >
-                    {teachers.map((teacher) => (
-                      <option key={teacher.id} value={teacher.id}>
-                        {teacher.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>Class</label>
-                  <select
-                    value={newAssignment.classId}
-                    onChange={(e) =>
-                      setNewAssignment({
-                        ...newAssignment,
-                        classId: e.target.value,
-                      })
-                    }
-                  >
-                    {classes.map((cls) => (
-                      <option key={cls.id} value={cls.id}>
-                        {cls.name} - {getDeptName(cls.departmentId)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <button onClick={addAssignment} className="add-btn">
-                Assign Teacher
-              </button>
-            </div>
-
-            <div className="data-list">
-              <div className="list-header">
-                <div>Teacher Name</div>
-                <div>Class</div>
-                <div>Department</div>
-                <div>Action</div>
-              </div>
-              {assignments.map((assignment) => (
-                <div key={assignment.id} className="list-item">
-                  <div>{getTeacherName(assignment.teacherId)}</div>
-                  <div>{getClassName(assignment.classId)}</div>
-                  <div>
-                    {getDeptName(
-                      classes.find((c) => c.id === assignment.classId)
-                        ?.departmentId,
+                    {teachers
+                      .filter((teacher) =>
+                        teacher.name
+                          .toLowerCase()
+                          .includes(selectedTeacherToRemove.toLowerCase()),
+                      )
+                      .map((teacher) => (
+                        <div
+                          key={teacher.id}
+                          onClick={() =>
+                            setSelectedTeacherToRemove(teacher.name)
+                          }
+                          style={{
+                            padding: "10px",
+                            cursor: "pointer",
+                            borderBottom: "1px solid #eee",
+                            backgroundColor:
+                              selectedTeacherToRemove.toLowerCase() ===
+                              teacher.name.toLowerCase()
+                                ? "#e3f2fd"
+                                : "#fff",
+                            transition: "background-color 0.2s",
+                          }}
+                          onMouseEnter={(e) =>
+                            (e.target.style.backgroundColor = "#f5f5f5")
+                          }
+                          onMouseLeave={(e) =>
+                            (e.target.style.backgroundColor =
+                              selectedTeacherToRemove.toLowerCase() ===
+                              teacher.name.toLowerCase()
+                                ? "#e3f2fd"
+                                : "#fff")
+                          }
+                        >
+                          {teacher.name} ({teacher.email})
+                        </div>
+                      ))}
+                    {teachers.filter((teacher) =>
+                      teacher.name
+                        .toLowerCase()
+                        .includes(selectedTeacherToRemove.toLowerCase()),
+                    ).length === 0 && (
+                      <div style={{ padding: "10px", color: "#999" }}>
+                        No teachers found
+                      </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => deleteAssignment(assignment.id)}
-                    className="delete-btn"
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  const teacherToDelete = teachers.find(
+                    (t) =>
+                      t.name.toLowerCase() ===
+                      selectedTeacherToRemove.toLowerCase(),
+                  );
+                  if (teacherToDelete) {
+                    deleteTeacher(teacherToDelete.id);
+                    setSelectedTeacherToRemove("");
+                  } else if (selectedTeacherToRemove.trim()) {
+                    alert("Teacher not found");
+                  }
+                }}
+                className="delete-btn"
+                disabled={!selectedTeacherToRemove.trim()}
+              >
+                Remove Teacher
+              </button>
             </div>
           </div>
         )}
@@ -629,30 +558,32 @@ export default function AdminDashboard({ user, onLogout }) {
             </button>
 
             <div className="report-container">
-              {Object.entries(report).map(([deptName, deptClasses]) => (
+              {Object.entries(report).map(([deptName, absences]) => (
                 <div key={deptName} className="report-section">
                   <div className="report-department-title">{deptName}</div>
-                  {Object.entries(deptClasses).map(([className, absences]) => (
-                    <div key={className} className="report-class">
-                      <div className="report-class-title">
-                        {className} ({absences.length} absent)
-                      </div>
-                      {absences.length > 0 ? (
-                        absences.map((student, idx) => (
-                          <div key={idx} className="report-student">
-                            {student.rollNo} - {student.name} ({student.reason})
-                          </div>
-                        ))
-                      ) : (
-                        <div
-                          className="report-student"
-                          style={{ color: "#27ae60" }}
-                        >
-                          No absences
-                        </div>
-                      )}
+                  <div className="report-class">
+                    <div className="report-class-title">
+                      Total Students:{" "}
+                      {getStudentsByDepartment(
+                        departments.find((d) => d.name === deptName)?.id,
+                      )?.length || 0}
+                      , Absent: {absences.length}
                     </div>
-                  ))}
+                    {absences.length > 0 ? (
+                      absences.map((student, idx) => (
+                        <div key={idx} className="report-student">
+                          {student.rollNo} - {student.name} ({student.reason})
+                        </div>
+                      ))
+                    ) : (
+                      <div
+                        className="report-student"
+                        style={{ color: "#27ae60" }}
+                      >
+                        No absences
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

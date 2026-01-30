@@ -482,4 +482,165 @@
   .list-item {
     grid-template-columns: 1fr;
   }
+
+  .programs-nav,
+  .departments-nav,
+  .classes-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .program-buttons,
+  .department-buttons,
+  .class-buttons {
+    flex-direction: column;
+  }
+
+  .program-btn,
+  .dept-btn {
+    width: 100%;
+  }
+}
+
+/* Management Tab Styles */
+.programs-nav {
+  margin-bottom: 25px;
+  background: #f9f9f9;
+  padding: 15px;
+  border-radius: 6px;
+}
+
+.programs-nav h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.program-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.program-btn {
+  padding: 10px 20px;
+  border: 2px solid #ddd;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  transition: all 0.3s;
+  color: #333;
+  min-width: 80px;
+}
+
+.program-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: #667eea;
+}
+
+.program-btn:hover:not(.active) {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.departments-nav {
+  margin-bottom: 25px;
+  background: #f0f4ff;
+  padding: 15px;
+  border-radius: 6px;
+  border-left: 4px solid #667eea;
+}
+
+.departments-nav h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.department-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dept-btn {
+  padding: 10px 20px;
+  border: 2px solid #667eea;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  transition: all 0.3s;
+  color: #667eea;
+}
+
+.dept-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: #667eea;
+}
+
+.dept-btn:hover:not(.active) {
+  background: #f9f9f9;
+}
+
+.classes-nav {
+  margin-bottom: 25px;
+  background: #fff5e6;
+  padding: 15px;
+  border-radius: 6px;
+  border-left: 4px solid #ffa500;
+}
+
+.classes-nav h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.class-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.class-btn {
+  padding: 10px 20px;
+  border: 2px solid #ffa500;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  transition: all 0.3s;
+  color: #ff8c00;
+}
+
+.class-btn.active {
+  background: linear-gradient(135deg, #ffa500 0%, #ff8c00 100%);
+  color: white;
+  border-color: #ff8c00;
+}
+
+.department-details {
+  margin-top: 20px;
+  background: #f5f5f5;
+  padding: 20px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+}
+
+.department-details h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.department-details p {
+  margin: 10px 0;
+  color: #555;
+  font-size: 14px;
 }

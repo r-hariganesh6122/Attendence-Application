@@ -1,38 +1,32 @@
-"use client";
-
 import { useState } from "react";
 import {
-  getClassesForTeacher,
-  getStudentsByClass,
-  getClassById,
+  getDepartmentsForTeacher,
+  getStudentsByDepartment,
   getDepartmentById,
   mockData,
 } from "../../lib/mockData";
 import "../attendance.css";
 
 export default function TeacherDashboard({ user, onLogout }) {
-  const teacherClasses = getClassesForTeacher(user.teacherId);
-  const [selectedClassId, setSelectedClassId] = useState(
-    teacherClasses.length > 0 ? teacherClasses[0].id : "",
+  const teacherDepartments = getDepartmentsForTeacher(user.teacherId);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState(
+    teacherDepartments.length > 0 ? teacherDepartments[0].id : "",
   );
   const [attendance, setAttendance] = useState(() => {
     const initial = {};
-    getStudentsByClass(selectedClassId).forEach((student) => {
+    getStudentsByDepartment(selectedDepartmentId).forEach((student) => {
       initial[student.id] = { absent: false, reason: "" };
     });
     return initial;
   });
 
-  const currentClass = getClassById(selectedClassId);
-  const department = currentClass
-    ? getDepartmentById(currentClass.departmentId)
-    : null;
-  const students = getStudentsByClass(selectedClassId);
+  const currentDepartment = getDepartmentById(selectedDepartmentId);
+  const students = getStudentsByDepartment(selectedDepartmentId);
 
-  const handleClassChange = (classId) => {
-    setSelectedClassId(classId);
+  const handleDepartmentChange = (departmentId) => {
+    setSelectedDepartmentId(departmentId);
     const initial = {};
-    getStudentsByClass(classId).forEach((student) => {
+    getStudentsByDepartment(departmentId).forEach((student) => {
       initial[student.id] = { absent: false, reason: "" };
     });
     setAttendance(initial);
@@ -60,8 +54,9 @@ export default function TeacherDashboard({ user, onLogout }) {
 
   const handleSubmit = () => {
     const attendanceRecord = {
-      classId: selectedClassId,
-      className: currentClass?.name,
+      departmentId: selectedDepartmentId,
+      departmentName: currentDepartment?.name,
+      program: currentDepartment?.program,
       date: new Date().toLocaleDateString(),
       timestamp: new Date().toISOString(),
       records: students.map((student) => ({
@@ -89,30 +84,30 @@ export default function TeacherDashboard({ user, onLogout }) {
         </div>
 
         <div className="class-selector-section">
-          <label htmlFor="class-select" className="class-label">
-            Select Class:
+          <label htmlFor="department-select" className="class-label">
+            Select Department:
           </label>
           <select
-            id="class-select"
-            value={selectedClassId}
-            onChange={(e) => handleClassChange(e.target.value)}
+            id="department-select"
+            value={selectedDepartmentId}
+            onChange={(e) => handleDepartmentChange(e.target.value)}
             className="class-select"
           >
-            {teacherClasses.map((cls) => (
-              <option key={cls.id} value={cls.id}>
-                {cls.name} - {getDepartmentById(cls.departmentId)?.name}
+            {teacherDepartments.map((dept) => (
+              <option key={dept.id} value={dept.id}>
+                {dept.name} - {dept.program}
               </option>
             ))}
           </select>
         </div>
 
-        {currentClass && (
+        {currentDepartment && (
           <div className="class-info">
             <p>
-              <strong>Department:</strong> {department?.name}
+              <strong>Department:</strong> {currentDepartment?.name}
             </p>
             <p>
-              <strong>Semester:</strong> {currentClass.semester}
+              <strong>Program:</strong> {currentDepartment?.program}
             </p>
             <p>
               <strong>Total Students:</strong> {students.length}

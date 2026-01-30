@@ -2,138 +2,281 @@
 // This will be replaced with real backend API calls later
 
 export const mockData = {
-  colleges: [
+  programs: [
     {
-      id: "col-001",
-      name: "Engineering College",
-      location: "New Delhi",
+      id: "prog-001",
+      name: "BE",
+      departments: [
+        {
+          id: "dept-001",
+          name: "Computer Science",
+        },
+        {
+          id: "dept-002",
+          name: "Electronics",
+        },
+      ],
     },
     {
-      id: "col-002",
-      name: "Arts & Science College",
-      location: "Mumbai",
+      id: "prog-002",
+      name: "BTech",
+      departments: [
+        {
+          id: "dept-003",
+          name: "Information Technology",
+        },
+        {
+          id: "dept-004",
+          name: "Mechanical Engineering",
+        },
+      ],
     },
   ],
 
   departments: [
+    // BE Program
     {
       id: "dept-001",
-      name: "Computer Science",
-      collegeId: "col-001",
+      name: "AERO",
+      program: "BE",
+      classes: [],
     },
     {
       id: "dept-002",
-      name: "Electronics",
-      collegeId: "col-001",
+      name: "BME",
+      program: "BE",
+      classes: [],
     },
     {
       id: "dept-003",
-      name: "English",
-      collegeId: "col-002",
+      name: "CIVIL",
+      program: "BE",
+      classes: [],
     },
     {
       id: "dept-004",
-      name: "Physics",
-      collegeId: "col-002",
-    },
-  ],
-
-  classes: [
-    {
-      id: "class-001",
-      name: "CSE-A",
-      departmentId: "dept-001",
-      semester: "4",
-      strength: 30,
+      name: "CSE",
+      program: "BE",
+      classes: ["A", "B", "C", "D", "E"],
     },
     {
-      id: "class-002",
-      name: "CSE-B",
-      departmentId: "dept-001",
-      semester: "4",
-      strength: 28,
+      id: "dept-005",
+      name: "CSE-AIML",
+      program: "BE",
+      classes: ["A", "B"],
     },
     {
-      id: "class-003",
-      name: "ECE-A",
-      departmentId: "dept-002",
-      semester: "2",
-      strength: 32,
+      id: "dept-006",
+      name: "CSE-IOT",
+      program: "BE",
+      classes: [],
     },
     {
-      id: "class-004",
-      name: "English-A",
-      departmentId: "dept-003",
-      semester: "1",
-      strength: 35,
+      id: "dept-007",
+      name: "CYBER SECURITY",
+      program: "BE",
+      classes: ["A", "B"],
+    },
+    {
+      id: "dept-008",
+      name: "ECE",
+      program: "BE",
+      classes: ["A", "B", "C"],
+    },
+    {
+      id: "dept-009",
+      name: "EEE",
+      program: "BE",
+      classes: [],
+    },
+    {
+      id: "dept-010",
+      name: "MECHANICAL",
+      program: "BE",
+      classes: [],
+    },
+    {
+      id: "dept-011",
+      name: "MCT",
+      program: "BE",
+      classes: [],
+    },
+    {
+      id: "dept-012",
+      name: "R&A",
+      program: "BE",
+      classes: [],
+    },
+    // BTech Program
+    {
+      id: "dept-013",
+      name: "AGRI",
+      program: "BTech",
+      classes: [],
+    },
+    {
+      id: "dept-014",
+      name: "AIDS",
+      program: "BTech",
+      classes: ["A", "B", "C"],
+    },
+    {
+      id: "dept-015",
+      name: "BIO-TECH",
+      program: "BTech",
+      classes: [],
+    },
+    {
+      id: "dept-016",
+      name: "CHEMICAL",
+      program: "BTech",
+      classes: [],
+    },
+    {
+      id: "dept-017",
+      name: "FOOD-TECH",
+      program: "BTech",
+      classes: [],
+    },
+    {
+      id: "dept-018",
+      name: "IT",
+      program: "BTech",
+      classes: ["A", "B", "C", "D"],
+    },
+    {
+      id: "dept-019",
+      name: "PHARMA",
+      program: "BTech",
+      classes: [],
     },
   ],
 
   students: [
-    // CSE-A
+    // Computer Science
     {
       id: "std-001",
       name: "Aarav Sharma",
       rollNo: "001",
-      classId: "class-001",
+      departmentId: "dept-001",
     },
     {
       id: "std-002",
       name: "Bhavna Patel",
       rollNo: "002",
-      classId: "class-001",
+      departmentId: "dept-001",
     },
     {
       id: "std-003",
       name: "Chirag Singh",
       rollNo: "003",
-      classId: "class-001",
+      departmentId: "dept-001",
     },
-    { id: "std-004", name: "Divya Verma", rollNo: "004", classId: "class-001" },
-    { id: "std-005", name: "Esha Gupta", rollNo: "005", classId: "class-001" },
-    // CSE-B
-    { id: "std-006", name: "Farah Khan", rollNo: "006", classId: "class-002" },
+    {
+      id: "std-004",
+      name: "Divya Verma",
+      rollNo: "004",
+      departmentId: "dept-001",
+    },
+    {
+      id: "std-005",
+      name: "Esha Gupta",
+      rollNo: "005",
+      departmentId: "dept-001",
+    },
+    // Electronics
+    {
+      id: "std-006",
+      name: "Farah Khan",
+      rollNo: "006",
+      departmentId: "dept-002",
+    },
     {
       id: "std-007",
       name: "Gaurav Kapoor",
       rollNo: "007",
-      classId: "class-002",
+      departmentId: "dept-002",
     },
-    { id: "std-008", name: "Harsh Joshi", rollNo: "008", classId: "class-002" },
+    {
+      id: "std-008",
+      name: "Harsh Joshi",
+      rollNo: "008",
+      departmentId: "dept-002",
+    },
     {
       id: "std-009",
       name: "Ishita Malhotra",
       rollNo: "009",
-      classId: "class-002",
+      departmentId: "dept-002",
     },
-    { id: "std-010", name: "Jayesh Rao", rollNo: "010", classId: "class-002" },
-    // ECE-A
-    { id: "std-011", name: "Kavya Nair", rollNo: "011", classId: "class-003" },
-    { id: "std-012", name: "Laxman Das", rollNo: "012", classId: "class-003" },
-    { id: "std-013", name: "Meera Singh", rollNo: "013", classId: "class-003" },
+    {
+      id: "std-010",
+      name: "Jayesh Rao",
+      rollNo: "010",
+      departmentId: "dept-002",
+    },
+    // Information Technology
+    {
+      id: "std-011",
+      name: "Kavya Nair",
+      rollNo: "011",
+      departmentId: "dept-003",
+    },
+    {
+      id: "std-012",
+      name: "Laxman Das",
+      rollNo: "012",
+      departmentId: "dept-003",
+    },
+    {
+      id: "std-013",
+      name: "Meera Singh",
+      rollNo: "013",
+      departmentId: "dept-003",
+    },
     {
       id: "std-014",
       name: "Nikhil Reddy",
       rollNo: "014",
-      classId: "class-003",
+      departmentId: "dept-003",
     },
-    { id: "std-015", name: "Pia Sharma", rollNo: "015", classId: "class-003" },
-    // English-A
-    { id: "std-016", name: "Qasim Ali", rollNo: "016", classId: "class-004" },
-    { id: "std-017", name: "Riya Dutta", rollNo: "017", classId: "class-004" },
+    {
+      id: "std-015",
+      name: "Pia Sharma",
+      rollNo: "015",
+      departmentId: "dept-003",
+    },
+    // Mechanical Engineering
+    {
+      id: "std-016",
+      name: "Qasim Ali",
+      rollNo: "016",
+      departmentId: "dept-004",
+    },
+    {
+      id: "std-017",
+      name: "Riya Dutta",
+      rollNo: "017",
+      departmentId: "dept-004",
+    },
     {
       id: "std-018",
       name: "Sanjay Kumar",
       rollNo: "018",
-      classId: "class-004",
+      departmentId: "dept-004",
     },
     {
       id: "std-019",
       name: "Tanya Mishra",
       rollNo: "019",
-      classId: "class-004",
+      departmentId: "dept-004",
     },
-    { id: "std-020", name: "Umesh Yadav", rollNo: "020", classId: "class-004" },
+    {
+      id: "std-020",
+      name: "Umesh Yadav",
+      rollNo: "020",
+      departmentId: "dept-004",
+    },
   ],
 
   teachers: [
@@ -174,31 +317,31 @@ export const mockData = {
     },
   ],
 
-  teacherClassAssignments: [
+  teacherDepartmentAssignments: [
     {
       id: "assign-001",
       teacherId: "teach-001",
-      classId: "class-001",
+      departmentId: "dept-001",
     },
     {
       id: "assign-002",
       teacherId: "teach-002",
-      classId: "class-001",
+      departmentId: "dept-001",
     },
     {
       id: "assign-003",
-      teacherId: "teach-002",
-      classId: "class-002",
+      teacherId: "teach-003",
+      departmentId: "dept-002",
     },
     {
       id: "assign-004",
-      teacherId: "teach-003",
-      classId: "class-003",
+      teacherId: "teach-004",
+      departmentId: "dept-003",
     },
     {
       id: "assign-005",
-      teacherId: "teach-004",
-      classId: "class-004",
+      teacherId: "teach-005",
+      departmentId: "dept-004",
     },
   ],
 
@@ -209,7 +352,6 @@ export const mockData = {
       email: "admin@college.edu",
       password: "admin123", // Frontend only - mock
       name: "Admin User",
-      collegeId: "col-001",
     },
   ],
 
@@ -233,36 +375,24 @@ export const mockData = {
 };
 
 // Helper functions to get data
-export const getClassesByDepartment = (departmentId) => {
-  return mockData.classes.filter((c) => c.departmentId === departmentId);
-};
-
-export const getStudentsByClass = (classId) => {
-  return mockData.students.filter((s) => s.classId === classId);
-};
-
-export const getClassesForTeacher = (teacherId) => {
-  const assignments = mockData.teacherClassAssignments.filter(
-    (a) => a.teacherId === teacherId,
-  );
-  return assignments.map((a) => {
-    const cls = mockData.classes.find((c) => c.id === a.classId);
-    return cls;
-  });
+export const getStudentsByDepartment = (departmentId) => {
+  return mockData.students.filter((s) => s.departmentId === departmentId);
 };
 
 export const getDepartmentById = (deptId) => {
   return mockData.departments.find((d) => d.id === deptId);
 };
 
-export const getClassById = (classId) => {
-  return mockData.classes.find((c) => c.id === classId);
-};
-
-export const getCollegeById = (collegeId) => {
-  return mockData.colleges.find((c) => c.id === collegeId);
-};
-
 export const getTeacherById = (teacherId) => {
   return mockData.teachers.find((t) => t.id === teacherId);
+};
+
+export const getDepartmentsForTeacher = (teacherId) => {
+  const assignments = mockData.teacherDepartmentAssignments.filter(
+    (a) => a.teacherId === teacherId,
+  );
+  return assignments.map((a) => {
+    const dept = mockData.departments.find((d) => d.id === a.departmentId);
+    return dept;
+  });
 };
