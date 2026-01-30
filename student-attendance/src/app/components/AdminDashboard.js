@@ -7,8 +7,106 @@ import {
 } from "../../lib/mockData";
 import "../attendance.css";
 
+const ClassManagement = ({ department, className, onBack }) => {
+  const [activeTab, setActiveTab] = useState("students");
+
+  // Get students for this department
+  const students = getStudentsByDepartment(department.id);
+
+  // Get teachers for this department
+  const teachers = mockData.teachers.filter((teacher) =>
+    mockData.teacherDepartmentAssignments.some(
+      (assignment) =>
+        assignment.teacherId === teacher.id &&
+        assignment.departmentId === department.id,
+    ),
+  );
+
+  return (
+    <div className="class-management">
+      <div
+        className="management-header"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "20px",
+        }}
+      >
+        <h3>
+          {department.name} {className ? `- Class ${className}` : ""} Management
+        </h3>
+        <button
+          onClick={onBack}
+          className="back-btn"
+          style={{ padding: "5px 10px", cursor: "pointer" }}
+        >
+          Back
+        </button>
+      </div>
+
+      <div className="admin-nav">
+        <button
+          className={`nav-btn ${activeTab === "students" ? "active" : ""}`}
+          onClick={() => setActiveTab("students")}
+        >
+          Student Details
+        </button>
+        <button
+          className={`nav-btn ${activeTab === "teachers" ? "active" : ""}`}
+          onClick={() => setActiveTab("teachers")}
+        >
+          Teachers Assigned
+        </button>
+      </div>
+
+      {activeTab === "students" && (
+        <div className="data-list">
+          <div className="list-header">
+            <div>Roll No</div>
+            <div>Name</div>
+          </div>
+          {students.length > 0 ? (
+            students.map((student) => (
+              <div key={student.id} className="list-item">
+                <div>{student.rollNo}</div>
+                <div>{student.name}</div>
+              </div>
+            ))
+          ) : (
+            <div style={{ padding: "10px" }}>No students found</div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "teachers" && (
+        <div className="data-list">
+          <div className="list-header">
+            <div>Name</div>
+            <div>Email</div>
+            <div>Phone</div>
+          </div>
+          {teachers.length > 0 ? (
+            teachers.map((teacher) => (
+              <div key={teacher.id} className="list-item">
+                <div>{teacher.name}</div>
+                <div>{teacher.email}</div>
+                <div>{teacher.phone}</div>
+              </div>
+            ))
+          ) : (
+            <div style={{ padding: "10px" }}>No teachers assigned</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function AdminDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState("management");
+  const [managementView, setManagementView] = useState("selection");
+  const [selectedClass, setSelectedClass] = useState(null);
   const [selectedProgram, setSelectedProgram] = useState("BE");
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [programs, setPrograms] = useState(mockData.programs);
@@ -243,88 +341,88 @@ export default function AdminDashboard({ user, onLogout }) {
         {/* Management Tab */}
         {activeTab === "management" && (
           <div className="admin-section">
-            <h2>Management</h2>
+            {managementView === "selection" ? (
+              <>
+                <h2>Management</h2>
 
-            {/* Programs Navigation */}
-            <div className="programs-nav">
-              <h3>Programs</h3>
-              <div className="program-buttons">
-                {programs.map((program) => (
-                  <button
-                    key={program.id}
-                    className={`program-btn ${selectedProgram === program.name ? "active" : ""}`}
-                    onClick={() => {
-                      setSelectedProgram(program.name);
-                      setSelectedDepartment(null);
-                    }}
-                  >
-                    {program.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Departments Navigation */}
-            {selectedProgram && (
-              <div className="departments-nav">
-                <h3>Departments - {selectedProgram}</h3>
-                <div className="department-buttons">
-                  {departments
-                    .filter((d) => d.program === selectedProgram)
-                    .map((dept) => (
+                {/* Programs Navigation */}
+                <div className="programs-nav">
+                  <h3>Programs</h3>
+                  <div className="program-buttons">
+                    {programs.map((program) => (
                       <button
-                        key={dept.id}
-                        className={`dept-btn ${selectedDepartment?.id === dept.id ? "active" : ""}`}
-                        onClick={() => setSelectedDepartment(dept)}
+                        key={program.id}
+                        className={`program-btn ${selectedProgram === program.name ? "active" : ""}`}
+                        onClick={() => {
+                          setSelectedProgram(program.name);
+                          setSelectedDepartment(null);
+                        }}
                       >
-                        {dept.name}
+                        {program.name}
                       </button>
                     ))}
+                  </div>
                 </div>
-              </div>
-            )}
 
-            {/* Classes Navigation (if applicable) */}
-            {selectedDepartment && selectedDepartment.classes.length > 0 && (
-              <div className="classes-nav">
-                <h3>Classes - {selectedDepartment.name}</h3>
-                <div className="class-buttons">
-                  {selectedDepartment.classes.map((classItem) => (
-                    <button
-                      key={classItem}
-                      className="class-btn"
-                      onClick={() => {
-                        // Handle class selection if needed later
-                      }}
-                    >
-                      Class {classItem}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+                {/* Departments Navigation */}
+                {selectedProgram && (
+                  <div className="departments-nav">
+                    <h3>Departments - {selectedProgram}</h3>
+                    <div className="department-buttons">
+                      {departments
+                        .filter((d) => d.program === selectedProgram)
+                        .map((dept) => (
+                          <button
+                            key={dept.id}
+                            className={`dept-btn ${selectedDepartment?.id === dept.id ? "active" : ""}`}
+                            onClick={() => {
+                              setSelectedDepartment(dept);
+                              // If department has no classes, go directly to class management
+                              if (dept.classes.length === 0) {
+                                setManagementView("class-details");
+                                setSelectedClass(null);
+                              }
+                            }}
+                          >
+                            {dept.name}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
 
-            {/* Department Details */}
-            {selectedDepartment && (
-              <div className="department-details">
-                <h3>Department: {selectedDepartment.name}</h3>
-                <div style={{ marginTop: "15px" }}>
-                  <p>
-                    <strong>Program:</strong> {selectedDepartment.program}
-                  </p>
-                  {selectedDepartment.classes.length > 0 && (
-                    <p>
-                      <strong>Classes:</strong>{" "}
-                      {selectedDepartment.classes.join(", ")}
-                    </p>
+                {/* Classes Navigation (if applicable) */}
+                {selectedDepartment &&
+                  selectedDepartment.classes.length > 0 && (
+                    <div className="classes-nav">
+                      <h3>Classes - {selectedDepartment.name}</h3>
+                      <div className="class-buttons">
+                        {selectedDepartment.classes.map((classItem) => (
+                          <button
+                            key={classItem}
+                            className="class-btn"
+                            onClick={() => {
+                              setSelectedClass(classItem);
+                              setManagementView("class-details");
+                            }}
+                          >
+                            Class {classItem}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                  <p>
-                    <strong>Total Students:</strong>{" "}
-                    {getStudentsByDepartment(selectedDepartment.id)?.length ||
-                      0}
-                  </p>
-                </div>
-              </div>
+              </>
+            ) : (
+              <ClassManagement
+                department={selectedDepartment}
+                className={selectedClass}
+                onBack={() => {
+                  setManagementView("selection");
+                  setSelectedClass(null);
+                  // Keep selected department selected so user doesn't lose context
+                }}
+              />
             )}
           </div>
         )}
