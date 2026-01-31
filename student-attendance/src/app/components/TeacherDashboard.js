@@ -1,4 +1,6 @@
 import { useState } from "react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import {
   getDepartmentsForTeacher,
   getStudentsByDepartment,
@@ -12,10 +14,11 @@ export default function TeacherDashboard({ user, onLogout }) {
   const [selectedDepartmentId, setSelectedDepartmentId] = useState(
     teacherDepartments.length > 0 ? teacherDepartments[0].id : "",
   );
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [attendance, setAttendance] = useState(() => {
     const initial = {};
     getStudentsByDepartment(selectedDepartmentId).forEach((student) => {
-      initial[student.id] = { absent: false, reason: "" };
+      initial[student.id] = { absent: false, reason: "", informed: "" };
     });
     return initial;
   });
@@ -27,19 +30,34 @@ export default function TeacherDashboard({ user, onLogout }) {
     setSelectedDepartmentId(departmentId);
     const initial = {};
     getStudentsByDepartment(departmentId).forEach((student) => {
-      initial[student.id] = { absent: false, reason: "" };
+      initial[student.id] = { absent: false, reason: "", informed: "" };
+    });
+    setAttendance(initial);
+  };
+
+  const handleDateChange = (date) => {
+    setSelectedDate(date);
+    // Reset attendance when date changes
+    const initial = {};
+    getStudentsByDepartment(selectedDepartmentId).forEach((student) => {
+      initial[student.id] = { absent: false, reason: "", informed: "" };
     });
     setAttendance(initial);
   };
 
   const handleAbsentChange = (studentId) => {
-    setAttendance((prev) => ({
-      ...prev,
-      [studentId]: {
-        ...prev[studentId],
-        absent: !prev[studentId].absent,
-      },
-    }));
+    setAttendance((prev) => {
+      const newAbsent = !prev[studentId].absent;
+      return {
+        ...prev,
+        [studentId]: {
+          ...prev[studentId],
+          absent: newAbsent,
+          reason: newAbsent ? prev[studentId].reason : "",
+          informed: newAbsent ? prev[studentId].informed : "",
+        },
+      };
+    });
   };
 
   const handleReasonChange = (studentId, value) => {
@@ -52,12 +70,22 @@ export default function TeacherDashboard({ user, onLogout }) {
     }));
   };
 
+  const handleInformedChange = (studentId, value) => {
+    setAttendance((prev) => ({
+      ...prev,
+      [studentId]: {
+        ...prev[studentId],
+        informed: value,
+      },
+    }));
+  };
+
   const handleSubmit = () => {
     const attendanceRecord = {
       departmentId: selectedDepartmentId,
       departmentName: currentDepartment?.name,
       program: currentDepartment?.program,
-      date: new Date().toLocaleDateString(),
+      date: selectedDate.toISOString().split("T")[0],
       timestamp: new Date().toISOString(),
       records: students.map((student) => ({
         studentId: student.id,
@@ -84,21 +112,63 @@ export default function TeacherDashboard({ user, onLogout }) {
         </div>
 
         <div className="class-selector-section">
-          <label htmlFor="department-select" className="class-label">
-            Select Department:
-          </label>
-          <select
-            id="department-select"
-            value={selectedDepartmentId}
-            onChange={(e) => handleDepartmentChange(e.target.value)}
-            className="class-select"
+          <div
+            style={{
+              display: "flex",
+              gap: "20px",
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
           >
-            {teacherDepartments.map((dept) => (
-              <option key={dept.id} value={dept.id}>
-                {dept.name} - {dept.program}
-              </option>
-            ))}
-          </select>
+            <div>
+              <label htmlFor="department-select" className="class-label">
+                Select Department:
+              </label>
+              <select
+                id="department-select"
+                value={selectedDepartmentId}
+                onChange={(e) => handleDepartmentChange(e.target.value)}
+                className="class-select"
+                style={{
+                  padding: "10px 15px",
+                  border: "2px solid #ddd",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  backgroundColor: "white",
+                  cursor: "pointer",
+                  minWidth: "200px",
+                }}
+              >
+                {teacherDepartments.map((dept) => (
+                  <option key={dept.id} value={dept.id}>
+                    {dept.name} - {dept.program}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="date-select" className="class-label">
+                Select Date:
+              </label>
+              <DatePicker
+                selected={selectedDate}
+                onChange={handleDateChange}
+                dateFormat="yyyy-MM-dd"
+                maxDate={new Date()}
+                className="class-select"
+                id="date-select"
+                style={{
+                  padding: "10px 15px",
+                  border: "2px solid #ddd",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  backgroundColor: "white",
+                  cursor: "pointer",
+                  minWidth: "200px",
+                }}
+              />
+            </div>
+          </div>
         </div>
 
         {currentDepartment && (
@@ -122,6 +192,7 @@ export default function TeacherDashboard({ user, onLogout }) {
               <th>Name</th>
               <th>Absent</th>
               <th>Reason for Absence</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -148,6 +219,20 @@ export default function TeacherDashboard({ user, onLogout }) {
                     disabled={!attendance[student.id]?.absent}
                     className="reason-input"
                   />
+                </td>
+                <td>
+                  <select
+                    value={attendance[student.id]?.informed || ""}
+                    onChange={(e) =>
+                      handleInformedChange(student.id, e.target.value)
+                    }
+                    disabled={!attendance[student.id]?.absent}
+                    className="informed-select"
+                  >
+                    <option value="">Select</option>
+                    <option value="Informed">Informed</option>
+                    <option value="Not Informed">Not Informed</option>
+                  </select>
                 </td>
               </tr>
             ))}

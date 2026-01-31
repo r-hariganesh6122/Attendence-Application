@@ -7,11 +7,13 @@ import {
 } from "../../lib/mockData";
 import "../attendance.css";
 
-const ClassManagement = ({ department, className, onBack }) => {
+const ClassManagement = ({ department, className, onBack, setAssignments }) => {
   const [activeTab, setActiveTab] = useState("students");
+  const [selectedTeacher, setSelectedTeacher] = useState("");
+  const [subject, setSubject] = useState("");
 
-  // Get students for this department
-  const students = getStudentsByDepartment(department.id);
+  // Get students for this department and class (if specified)
+  const students = getStudentsByDepartment(department.id, className);
 
   // Get teachers for this department
   const teachers = mockData.teachers.filter((teacher) =>
@@ -65,12 +67,20 @@ const ClassManagement = ({ department, className, onBack }) => {
           <div className="list-header">
             <div>Roll No</div>
             <div>Name</div>
+            <div>Residence Type</div>
           </div>
           {students.length > 0 ? (
             students.map((student) => (
               <div key={student.id} className="list-item">
                 <div>{student.rollNo}</div>
                 <div>{student.name}</div>
+                <div>
+                  {student.residenceType
+                    ? student.residenceType.replace(/\b\w/g, (l) =>
+                        l.toUpperCase(),
+                      )
+                    : "N/A"}
+                </div>
               </div>
             ))
           ) : (
@@ -80,24 +90,80 @@ const ClassManagement = ({ department, className, onBack }) => {
       )}
 
       {activeTab === "teachers" && (
-        <div className="data-list">
-          <div className="list-header">
-            <div>Name</div>
-            <div>Email</div>
-            <div>Phone</div>
+        <>
+          <div className="data-list">
+            <div className="list-header">
+              <div>Name</div>
+              <div>Email</div>
+              <div>Phone</div>
+              <div>Subject</div>
+            </div>
+            {teachers.length > 0 ? (
+              teachers.map((teacher) => (
+                <div key={teacher.id} className="list-item">
+                  <div>{teacher.name}</div>
+                  <div>{teacher.email}</div>
+                  <div>{teacher.phone}</div>
+                  <div>{teacher.subject || "N/A"}</div>
+                </div>
+              ))
+            ) : (
+              <div style={{ padding: "10px" }}>No teachers assigned</div>
+            )}
           </div>
-          {teachers.length > 0 ? (
-            teachers.map((teacher) => (
-              <div key={teacher.id} className="list-item">
-                <div>{teacher.name}</div>
-                <div>{teacher.email}</div>
-                <div>{teacher.phone}</div>
-              </div>
-            ))
-          ) : (
-            <div style={{ padding: "10px" }}>No teachers assigned</div>
-          )}
-        </div>
+
+          {/* Assign Teacher Form */}
+          <div className="form-section" style={{ marginTop: "30px" }}>
+            <h3>Assign Teacher to Department</h3>
+            <div className="form-group">
+              <label>Select Teacher</label>
+              <select
+                value={selectedTeacher}
+                onChange={(e) => setSelectedTeacher(e.target.value)}
+              >
+                <option value="">Select a teacher</option>
+                {mockData.teachers.map((teacher) => (
+                  <option key={teacher.id} value={teacher.id}>
+                    {teacher.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Subject</label>
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="Enter subject (e.g., Mathematics, Physics)"
+              />
+            </div>
+            <button
+              className="add-btn"
+              onClick={() => {
+                if (selectedTeacher && subject.trim()) {
+                  const newAssignment = {
+                    id: `assign-${Date.now()}`,
+                    teacherId: selectedTeacher,
+                    departmentId: department.id,
+                    subject: subject.trim(),
+                  };
+                  setAssignments([
+                    ...mockData.teacherDepartmentAssignments,
+                    newAssignment,
+                  ]);
+                  setSelectedTeacher("");
+                  setSubject("");
+                  alert("Teacher assigned successfully!");
+                } else {
+                  alert("Please select a teacher and enter a subject.");
+                }
+              }}
+            >
+              Assign Teacher
+            </button>
+          </div>
+        </>
       )}
     </div>
   );
@@ -179,7 +245,12 @@ export default function AdminDashboard({ user, onLogout }) {
           .map((s) => ({
             name: s.name,
             rollNo: s.rollNo,
+            residenceType: (s.residenceType || "N/A").replace(/\b\w/g, (l) =>
+              l.toUpperCase(),
+            ),
+            totalLeaves: Math.floor(Math.random() * 5) + 1,
             reason: "Medical leave",
+            status: Math.random() < 0.5 ? "Informed" : "Not Informed",
           }));
         report[dept.name] = absences;
       }
@@ -266,7 +337,10 @@ export default function AdminDashboard({ user, onLogout }) {
               <tr>
                 <th>Roll No</th>
                 <th>Student Name</th>
+                <th>Residence Type</th>
+                <th>Total No. of Leaves</th>
                 <th>Reason for Absence</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -277,7 +351,10 @@ export default function AdminDashboard({ user, onLogout }) {
             <tr>
               <td>${student.rollNo}</td>
               <td>${student.name}</td>
+              <td>${student.residenceType}</td>
+              <td>${student.totalLeaves}</td>
               <td>${student.reason}</td>
+              <td>${student.status}</td>
             </tr>
           `;
         });
@@ -417,6 +494,7 @@ export default function AdminDashboard({ user, onLogout }) {
               <ClassManagement
                 department={selectedDepartment}
                 className={selectedClass}
+                setAssignments={setAssignments}
                 onBack={() => {
                   setManagementView("selection");
                   setSelectedClass(null);
@@ -670,7 +748,9 @@ export default function AdminDashboard({ user, onLogout }) {
                     {absences.length > 0 ? (
                       absences.map((student, idx) => (
                         <div key={idx} className="report-student">
-                          {student.rollNo} - {student.name} ({student.reason})
+                          {student.rollNo} - {student.name} -{" "}
+                          {student.residenceType} - {student.totalLeaves} -{" "}
+                          {student.reason} - {student.status}
                         </div>
                       ))
                     ) : (
