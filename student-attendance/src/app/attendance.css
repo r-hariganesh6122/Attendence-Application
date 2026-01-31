@@ -696,3 +696,17 @@
 .back-btn:active {
   transform: translateY(0);
 }
+
+.react-datepicker__input-container input {
+  height: 42px;
+  padding: 0 15px;
+
+  line-height: normal;
+  font-size: 14px;
+  font-family: Arial, sans-serif;
+
+  display: flex;
+  align-items: center;
+
+  box-sizing: border-box;
+}

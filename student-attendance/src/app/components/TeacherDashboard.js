@@ -115,7 +115,7 @@ export default function TeacherDashboard({ user, onLogout }) {
           <div
             style={{
               display: "flex",
-              gap: "20px",
+              gap: "10px",
               alignItems: "center",
               flexWrap: "wrap",
             }}
@@ -136,7 +136,6 @@ export default function TeacherDashboard({ user, onLogout }) {
                   fontSize: "14px",
                   backgroundColor: "white",
                   cursor: "pointer",
-                  minWidth: "200px",
                 }}
               >
                 {teacherDepartments.map((dept) => (
@@ -157,15 +156,6 @@ export default function TeacherDashboard({ user, onLogout }) {
                 maxDate={new Date()}
                 className="class-select"
                 id="date-select"
-                style={{
-                  padding: "10px 15px",
-                  border: "2px solid #ddd",
-                  borderRadius: "6px",
-                  fontSize: "14px",
-                  backgroundColor: "white",
-                  cursor: "pointer",
-                  minWidth: "200px",
-                }}
               />
             </div>
           </div>

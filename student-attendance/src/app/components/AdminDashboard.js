@@ -239,20 +239,51 @@ export default function AdminDashboard({ user, onLogout }) {
     departments.forEach((dept) => {
       const students = getStudentsByDepartment(dept.id);
       if (students.length > 0) {
-        // Simulate some absences
-        const absences = students
-          .filter((_, idx) => idx % 3 === 0)
-          .map((s) => ({
-            name: s.name,
-            rollNo: s.rollNo,
-            residenceType: (s.residenceType || "N/A").replace(/\b\w/g, (l) =>
-              l.toUpperCase(),
-            ),
-            totalLeaves: Math.floor(Math.random() * 5) + 1,
-            reason: "Medical leave",
-            status: Math.random() < 0.5 ? "Informed" : "Not Informed",
-          }));
-        report[dept.name] = absences;
+        if (dept.classes.length > 0) {
+          // Department has classes - group by class
+          const classGroups = {};
+          dept.classes.forEach((className) => {
+            const classStudents = getStudentsByDepartment(dept.id, className);
+            if (classStudents.length > 0) {
+              const absences = classStudents
+                .filter((_, idx) => idx % 3 === 0)
+                .map((s) => ({
+                  name: s.name,
+                  rollNo: s.rollNo,
+                  residenceType: (s.residenceType || "N/A").replace(
+                    /\b\w/g,
+                    (l) => l.toUpperCase(),
+                  ),
+                  totalLeaves: Math.floor(Math.random() * 5) + 1,
+                  reason: "Medical leave",
+                  status: Math.random() < 0.5 ? "Informed" : "Not Informed",
+                }));
+              if (absences.length > 0) {
+                classGroups[`Class ${className}`] = absences;
+              }
+            }
+          });
+          if (Object.keys(classGroups).length > 0) {
+            report[dept.name] = classGroups;
+          }
+        } else {
+          // Department has no classes - show department directly
+          const absences = students
+            .filter((_, idx) => idx % 3 === 0)
+            .map((s) => ({
+              name: s.name,
+              rollNo: s.rollNo,
+              residenceType: (s.residenceType || "N/A").replace(/\b\w/g, (l) =>
+                l.toUpperCase(),
+              ),
+              totalLeaves: Math.floor(Math.random() * 5) + 1,
+              reason: "Medical leave",
+              status: Math.random() < 0.5 ? "Informed" : "Not Informed",
+            }));
+          if (absences.length > 0) {
+            report[dept.name] = absences;
+          }
+        }
       }
     });
 
@@ -316,6 +347,15 @@ export default function AdminDashboard({ user, onLogout }) {
               margin-top: 20px;
               margin-bottom: 10px;
             }
+            .class-header {
+              background-color: #2c3e50;
+              color: white;
+              font-size: 18px;
+              font-weight: bold;
+              padding: 10px;
+              margin-top: 15px;
+              margin-bottom: 5px;
+            }
             @media print {
               body { margin: 10px; }
               table { page-break-inside: avoid; }
@@ -327,44 +367,89 @@ export default function AdminDashboard({ user, onLogout }) {
           <div class="date">Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
     `;
 
-    Object.entries(report).forEach(([deptName, absences]) => {
+    Object.entries(report).forEach(([deptName, deptData]) => {
       printContent += `<div class="department-header">${deptName}</div>`;
 
-      if (absences.length > 0) {
-        printContent += `
-          <table>
-            <thead>
-              <tr>
-                <th>Roll No</th>
-                <th>Student Name</th>
-                <th>Residence Type</th>
-                <th>Total No. of Leaves</th>
-                <th>Reason for Absence</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-        `;
-
-        absences.forEach((student) => {
+      if (Array.isArray(deptData)) {
+        // Department without classes - direct absences array
+        if (deptData.length > 0) {
           printContent += `
-            <tr>
-              <td>${student.rollNo}</td>
-              <td>${student.name}</td>
-              <td>${student.residenceType}</td>
-              <td>${student.totalLeaves}</td>
-              <td>${student.reason}</td>
-              <td>${student.status}</td>
-            </tr>
+            <table>
+              <thead>
+                <tr>
+                  <th>Roll No</th>
+                  <th>Student Name</th>
+                  <th>Residence Type</th>
+                  <th>Total No. of Leaves</th>
+                  <th>Reason for Absence</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
           `;
-        });
 
-        printContent += `
-            </tbody>
-          </table>
-        `;
+          deptData.forEach((student) => {
+            printContent += `
+              <tr>
+                <td>${student.rollNo}</td>
+                <td>${student.name}</td>
+                <td>${student.residenceType}</td>
+                <td>${student.totalLeaves}</td>
+                <td>${student.reason}</td>
+                <td>${student.status}</td>
+              </tr>
+            `;
+          });
+
+          printContent += `
+              </tbody>
+            </table>
+          `;
+        } else {
+          printContent += `<p style="color: #27ae60; padding: 10px;">No absences</p>`;
+        }
       } else {
-        printContent += `<p style="color: #27ae60; padding: 10px;">No absences</p>`;
+        // Department with classes - object with class keys
+        Object.entries(deptData).forEach(([className, absences]) => {
+          printContent += `<div class="class-header">${className}</div>`;
+
+          if (absences.length > 0) {
+            printContent += `
+              <table>
+                <thead>
+                  <tr>
+                    <th>Roll No</th>
+                    <th>Student Name</th>
+                    <th>Residence Type</th>
+                    <th>Total No. of Leaves</th>
+                    <th>Reason for Absence</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+            `;
+
+            absences.forEach((student) => {
+              printContent += `
+                <tr>
+                  <td>${student.rollNo}</td>
+                  <td>${student.name}</td>
+                  <td>${student.residenceType}</td>
+                  <td>${student.totalLeaves}</td>
+                  <td>${student.reason}</td>
+                  <td>${student.status}</td>
+                </tr>
+              `;
+            });
+
+            printContent += `
+                </tbody>
+              </table>
+            `;
+          } else {
+            printContent += `<p style="color: #27ae60; padding: 10px;">No absences</p>`;
+          }
+        });
       }
     });
 
@@ -734,34 +819,77 @@ export default function AdminDashboard({ user, onLogout }) {
             </button>
 
             <div className="report-container">
-              {Object.entries(report).map(([deptName, absences]) => (
+              {Object.entries(report).map(([deptName, deptData]) => (
                 <div key={deptName} className="report-section">
                   <div className="report-department-title">{deptName}</div>
-                  <div className="report-class">
-                    <div className="report-class-title">
-                      Total Students:{" "}
-                      {getStudentsByDepartment(
-                        departments.find((d) => d.name === deptName)?.id,
-                      )?.length || 0}
-                      , Absent: {absences.length}
-                    </div>
-                    {absences.length > 0 ? (
-                      absences.map((student, idx) => (
-                        <div key={idx} className="report-student">
-                          {student.rollNo} - {student.name} -{" "}
-                          {student.residenceType} - {student.totalLeaves} -{" "}
-                          {student.reason} - {student.status}
-                        </div>
-                      ))
-                    ) : (
-                      <div
-                        className="report-student"
-                        style={{ color: "#27ae60" }}
-                      >
-                        No absences
+
+                  {Array.isArray(deptData) ? (
+                    // Department without classes - direct absences array
+                    <div className="report-class">
+                      <div className="report-class-title">
+                        Total Students:{" "}
+                        {getStudentsByDepartment(
+                          departments.find((d) => d.name === deptName)?.id,
+                        )?.length || 0}
+                        , Absent: {deptData.length}
                       </div>
-                    )}
-                  </div>
+                      {deptData.length > 0 ? (
+                        deptData.map((student, idx) => (
+                          <div key={idx} className="report-student">
+                            {student.rollNo} - {student.name} -{" "}
+                            {student.residenceType} - {student.totalLeaves} -{" "}
+                            {student.reason} - {student.status}
+                          </div>
+                        ))
+                      ) : (
+                        <div
+                          className="report-student"
+                          style={{ color: "#27ae60" }}
+                        >
+                          No absences
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    // Department with classes - object with class keys
+                    Object.entries(deptData).map(([className, absences]) => (
+                      <div key={className} className="report-class">
+                        <div
+                          className="report-class-title"
+                          style={{
+                            backgroundColor: "#2c3e50",
+                            color: "white",
+                            padding: "8px 12px",
+                            marginBottom: "10px",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {className} - Total Students:{" "}
+                          {getStudentsByDepartment(
+                            departments.find((d) => d.name === deptName)?.id,
+                            className.replace("Class ", ""),
+                          )?.length || 0}
+                          , Absent: {absences.length}
+                        </div>
+                        {absences.length > 0 ? (
+                          absences.map((student, idx) => (
+                            <div key={idx} className="report-student">
+                              {student.rollNo} - {student.name} -{" "}
+                              {student.residenceType} - {student.totalLeaves} -{" "}
+                              {student.reason} - {student.status}
+                            </div>
+                          ))
+                        ) : (
+                          <div
+                            className="report-student"
+                            style={{ color: "#27ae60" }}
+                          >
+                            No absences
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
               ))}
             </div>
