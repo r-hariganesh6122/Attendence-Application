@@ -1,45 +1,70 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import {
-  getDepartmentsForTeacher,
-  getStudentsByDepartment,
-  getDepartmentById,
-  mockData,
-} from "../../lib/mockData";
+
 import "../attendance.css";
 
-export default function TeacherDashboard({ user, onLogout }) {
-  const teacherDepartments = getDepartmentsForTeacher(user.teacherId);
-  const [selectedDepartmentId, setSelectedDepartmentId] = useState(
-    teacherDepartments.length > 0 ? teacherDepartments[0].id : "",
-  );
+function TeacherDashboard({ user, onLogout }) {
+  const [departments, setDepartments] = useState([]);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [attendance, setAttendance] = useState(() => {
-    const initial = {};
-    getStudentsByDepartment(selectedDepartmentId).forEach((student) => {
-      initial[student.id] = { absent: false, reason: "", informed: "" };
-    });
-    return initial;
-  });
+  const [students, setStudents] = useState([]);
+  const [attendance, setAttendance] = useState({});
+  const [currentDepartment, setCurrentDepartment] = useState(null);
 
-  const currentDepartment = getDepartmentById(selectedDepartmentId);
-  const students = getStudentsByDepartment(selectedDepartmentId);
+  // Fetch teacher's departments (classes)
+  useEffect(() => {
+    if (!user?.id) return;
+    fetch(`/api/teacher-departments?teacherId=${user.id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.departments.length > 0) {
+          setDepartments(data.departments);
+          setSelectedDepartmentId(data.departments[0].id);
+        } else {
+          setDepartments([]);
+          setSelectedDepartmentId("");
+        }
+      });
+  }, [user]);
+
+  // Fetch students for selected department/class
+  useEffect(() => {
+    if (!selectedDepartmentId) {
+      setStudents([]);
+      setAttendance({});
+      setCurrentDepartment(null);
+      return;
+    }
+    fetch(`/api/students?classId=${selectedDepartmentId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setStudents(data.students);
+          const initial = {};
+          data.students.forEach((student) => {
+            initial[student.id] = { absent: false, reason: "", informed: "" };
+          });
+          setAttendance(initial);
+        } else {
+          setStudents([]);
+          setAttendance({});
+        }
+      });
+    // Set current department/class info
+    const dept = departments.find((d) => d.id === selectedDepartmentId);
+    setCurrentDepartment(dept || null);
+  }, [selectedDepartmentId, departments]);
 
   const handleDepartmentChange = (departmentId) => {
     setSelectedDepartmentId(departmentId);
-    const initial = {};
-    getStudentsByDepartment(departmentId).forEach((student) => {
-      initial[student.id] = { absent: false, reason: "", informed: "" };
-    });
-    setAttendance(initial);
   };
 
   const handleDateChange = (date) => {
     setSelectedDate(date);
     // Reset attendance when date changes
     const initial = {};
-    getStudentsByDepartment(selectedDepartmentId).forEach((student) => {
+    students.forEach((student) => {
       initial[student.id] = { absent: false, reason: "", informed: "" };
     });
     setAttendance(initial);
@@ -84,13 +109,11 @@ export default function TeacherDashboard({ user, onLogout }) {
     const attendanceRecord = {
       departmentId: selectedDepartmentId,
       departmentName: currentDepartment?.name,
-      program: currentDepartment?.program,
       date: selectedDate.toISOString().split("T")[0],
       timestamp: new Date().toISOString(),
       records: students.map((student) => ({
         studentId: student.id,
         name: student.name,
-        rollNo: student.rollNo,
         ...attendance[student.id],
       })),
     };
@@ -138,9 +161,9 @@ export default function TeacherDashboard({ user, onLogout }) {
                   cursor: "pointer",
                 }}
               >
-                {teacherDepartments.map((dept) => (
+                {departments.map((dept) => (
                   <option key={dept.id} value={dept.id}>
-                    {dept.name} - {dept.program}
+                    {dept.name}
                   </option>
                 ))}
               </select>
@@ -236,3 +259,5 @@ export default function TeacherDashboard({ user, onLogout }) {
     </div>
   );
 }
+
+export default TeacherDashboard;

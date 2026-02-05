@@ -1,0 +1,77 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Program {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  departments Department[]
+}
+
+model Department {
+  id        Int      @id @default(autoincrement())
+  name      String
+  programId Int
+  program   Program   @relation(fields: [programId], references: [id])
+  classes   Class[]
+  @@unique([name, programId])
+}
+
+model Class {
+  id           Int         @id @default(autoincrement())
+  name         String
+  teacherId    Int
+  departmentId Int
+
+  teacher      User       @relation("TeacherClasses", fields: [teacherId], references: [id])
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  attendance   Attendance[]
+  students     Student[]
+
+  @@unique([name, departmentId])
+}
+
+
+model User {
+  id        Int     @id @default(autoincrement())
+  name      String
+  email     String  @unique
+  mobile    String  @unique
+  password  String
+  role      String  // 'admin', 'teacher', 'student'
+  classesTaught Class[] @relation("TeacherClasses")
+  Attendance Attendance[]
+}
+
+model Attendance {
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  userId    Int
+  classId   Int
+  status    String   // 'present', 'absent', etc.
+  user      User     @relation(fields: [userId], references: [id])
+  class     Class    @relation(fields: [classId], references: [id])
+}
+
+// Enum for student residence type
+enum ResidenceType {
+  H   // Hosteller
+  D   // Day Scholar
+  OSS // Outside Stayer
+}
+
+model Student {
+  id           Int           @id @default(autoincrement())
+  rollNo       String
+  regNo        String
+  studentName  String
+  residence    ResidenceType
+  classId      Int
+  class        Class         @relation(fields: [classId], references: [id])
+}

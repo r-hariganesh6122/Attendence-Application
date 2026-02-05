@@ -1,16 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "../attendance.css";
 
-export default function AttendancePage({ userPhone, onLogout }) {
-  const [students, setStudents] = useState([
-    { id: 1, name: "John Doe", absent: false, reason: "" },
-    { id: 2, name: "Jane Smith", absent: false, reason: "" },
-    { id: 3, name: "Mike Johnson", absent: false, reason: "" },
-    { id: 4, name: "Sarah Williams", absent: false, reason: "" },
-    { id: 5, name: "Tom Brown", absent: false, reason: "" },
-  ]);
+  const [students, setStudents] = useState([]);
+  useEffect(() => {
+    fetch("/api/students")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          // Add absent/reason fields for UI state
+          setStudents(
+            data.students.map((s) => ({ ...s, absent: false, reason: "" }))
+          );
+        } else {
+          setStudents([]);
+        }
+      })
+      .catch(() => setStudents([]));
+  }, []);
 
   const handleAbsentChange = (id) => {
     setStudents(

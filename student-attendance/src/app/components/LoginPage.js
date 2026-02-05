@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { mockData } from "../../lib/mockData";
+
 import "../login.css";
 
 export default function LoginPage({ onLogin }) {
@@ -29,25 +29,22 @@ export default function LoginPage({ onLogin }) {
       return;
     }
 
-    // Mock authentication
-    let user = null;
-
-    if (role === "teacher") {
-      user = mockData.teacherUsers.find(
-        (u) => u.email === email && u.password === password,
-      );
-    } else if (role === "admin") {
-      user = mockData.adminUsers.find(
-        (u) => u.email === email && u.password === password,
-      );
-    }
-
-    if (user) {
-      setError("");
-      onLogin({ ...user, role });
-    } else {
-      setError("Invalid email or password");
-    }
+    // Real authentication via API
+    fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: email, password, role }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setError("");
+          onLogin(data.user);
+        } else {
+          setError(data.message || "Invalid email or password");
+        }
+      })
+      .catch(() => setError("Server error. Please try again later."));
   };
 
   return (
