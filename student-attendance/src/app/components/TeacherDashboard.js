@@ -1,3 +1,4 @@
+"use client";
 import { useState, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -36,25 +37,44 @@ function TeacherDashboard({ user, onLogout }) {
       setCurrentDepartment(null);
       return;
     }
-    fetch(`/api/students?classId=${selectedDepartmentId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
-          setStudents(data.students);
-          const initial = {};
-          data.students.forEach((student) => {
-            initial[student.id] = { absent: false, reason: "", informed: "" };
-          });
-          setAttendance(initial);
-        } else {
-          setStudents([]);
-          setAttendance({});
-        }
+    async function fetchData() {
+      // Fetch students
+      const resStudents = await fetch(
+        `/api/students?classId=${selectedDepartmentId}`,
+      );
+      const dataStudents = await resStudents.json();
+      setStudents(dataStudents.success ? dataStudents.students : []);
+
+      // Fetch attendance records for selected date
+      const dateStr = selectedDate.toISOString().split("T")[0];
+      const resAttendance = await fetch(
+        `/api/attendance?classId=${selectedDepartmentId}&from=${dateStr}&to=${dateStr}`,
+      );
+      const dataAttendance = await resAttendance.json();
+      const attendanceRecords = dataAttendance.success
+        ? dataAttendance.attendanceRecords
+        : [];
+
+      // Pre-fill attendance state
+      const initial = {};
+      (dataStudents.success ? dataStudents.students : []).forEach((student) => {
+        const record = attendanceRecords.find(
+          (r) => r.studentId === student.id,
+        );
+        initial[student.id] = {
+          absent: record ? record.status === "absent" : false,
+          reason: record ? record.absenceReason || "" : "",
+          informed: record ? !!record.informed : false,
+        };
       });
-    // Set current department/class info
-    const dept = departments.find((d) => d.id === selectedDepartmentId);
-    setCurrentDepartment(dept || null);
-  }, [selectedDepartmentId, departments]);
+      setAttendance(initial);
+
+      // Set current department/class info
+      const dept = departments.find((d) => d.id === selectedDepartmentId);
+      setCurrentDepartment(dept || null);
+    }
+    fetchData();
+  }, [selectedDepartmentId, departments, selectedDate]);
 
   const handleDepartmentChange = (departmentId) => {
     setSelectedDepartmentId(departmentId);
@@ -65,7 +85,7 @@ function TeacherDashboard({ user, onLogout }) {
     // Reset attendance when date changes
     const initial = {};
     students.forEach((student) => {
-      initial[student.id] = { absent: false, reason: "", informed: "" };
+      initial[student.id] = { absent: false, reason: "", informed: false };
     });
     setAttendance(initial);
   };
@@ -79,7 +99,7 @@ function TeacherDashboard({ user, onLogout }) {
           ...prev[studentId],
           absent: newAbsent,
           reason: newAbsent ? prev[studentId].reason : "",
-          informed: newAbsent ? prev[studentId].informed : "",
+          informed: newAbsent ? prev[studentId].informed : false,
         },
       };
     });
@@ -95,12 +115,12 @@ function TeacherDashboard({ user, onLogout }) {
     }));
   };
 
-  const handleInformedChange = (studentId, value) => {
+  const handleInformedChange = (studentId) => {
     setAttendance((prev) => ({
       ...prev,
       [studentId]: {
         ...prev[studentId],
-        informed: value,
+        informed: !prev[studentId].informed,
       },
     }));
   };
@@ -127,7 +147,14 @@ function TeacherDashboard({ user, onLogout }) {
         <div className="attendance-header">
           <div>
             <h1>Teacher Dashboard</h1>
-            <p className="teacher-name">Welcome, {user.name}</p>
+            <p className="teacher-name">
+              Welcome,{" "}
+              {user &&
+                (user.name ||
+                  user.teacherName ||
+                  user.fullName ||
+                  user.username)}
+            </p>
           </div>
           <button onClick={onLogout} className="logout-btn">
             Logout
@@ -201,24 +228,33 @@ function TeacherDashboard({ user, onLogout }) {
         <table className="attendance-table">
           <thead>
             <tr>
-              <th>Roll No.</th>
+              <th>Reg No.</th>
               <th>Name</th>
               <th>Absent</th>
+              <th>Informed</th>
               <th>Reason for Absence</th>
-              <th>Status</th>
             </tr>
           </thead>
           <tbody>
             {students.map((student) => (
               <tr key={student.id}>
-                <td>{student.rollNo}</td>
-                <td>{student.name}</td>
+                <td>{student.regNo}</td>
+                <td>{student.studentName || student.name}</td>
                 <td className="checkbox-cell">
                   <input
                     type="checkbox"
                     checked={attendance[student.id]?.absent || false}
                     onChange={() => handleAbsentChange(student.id)}
                     className="checkbox-input"
+                  />
+                </td>
+                <td className="checkbox-cell">
+                  <input
+                    type="checkbox"
+                    checked={attendance[student.id]?.informed || false}
+                    onChange={() => handleInformedChange(student.id)}
+                    className="checkbox-input"
+                    disabled={!attendance[student.id]?.absent}
                   />
                 </td>
                 <td>
@@ -233,20 +269,6 @@ function TeacherDashboard({ user, onLogout }) {
                     className="reason-input"
                   />
                 </td>
-                <td>
-                  <select
-                    value={attendance[student.id]?.informed || ""}
-                    onChange={(e) =>
-                      handleInformedChange(student.id, e.target.value)
-                    }
-                    disabled={!attendance[student.id]?.absent}
-                    className="informed-select"
-                  >
-                    <option value="">Select</option>
-                    <option value="Informed">Informed</option>
-                    <option value="Not Informed">Not Informed</option>
-                  </select>
-                </td>
               </tr>
             ))}
           </tbody>
@@ -259,5 +281,4 @@ function TeacherDashboard({ user, onLogout }) {
     </div>
   );
 }
-
 export default TeacherDashboard;

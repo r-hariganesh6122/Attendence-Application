@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
+import "../../attendance.css";
 
 export default function ClassDetailsPage({ params }) {
   const { id } = use(params);
+  const router = useRouter();
   const [classInfo, setClassInfo] = useState(null);
   const [students, setStudents] = useState([]);
   const [teachers, setTeachers] = useState([]);
@@ -38,7 +41,7 @@ export default function ClassDetailsPage({ params }) {
               {classInfo ? classInfo.name : `Class ID: ${id}`}
             </p>
           </div>
-          <button onClick={() => window.history.back()} className="back-btn">
+          <button onClick={() => router.push("/")} className="back-btn">
             ← Back
           </button>
         </div>
@@ -60,6 +63,7 @@ export default function ClassDetailsPage({ params }) {
           {tab === "students" && (
             <div className="data-list">
               <div className="list-header">
+                <div>S No</div>
                 <div>Roll No</div>
                 <div>Reg No</div>
                 <div>Name</div>
@@ -70,11 +74,12 @@ export default function ClassDetailsPage({ params }) {
                   No students found for this class.
                 </div>
               ) : (
-                students.map((student) => (
+                students.map((student, idx) => (
                   <div key={student.id} className="list-item">
+                    <div>{idx + 1}</div>
                     <div>{student.rollNo || "-"}</div>
                     <div>{student.regNo || "-"}</div>
-                    <div>{student.name}</div>
+                    <div>{student.studentName || "-"}</div>
                     <div>{student.residence || "-"}</div>
                   </div>
                 ))
@@ -84,6 +89,7 @@ export default function ClassDetailsPage({ params }) {
           {tab === "teachers" && (
             <div className="data-list">
               <div className="list-header">
+                <div>S No</div>
                 <div>Name</div>
                 <div>Subject</div>
               </div>
@@ -92,8 +98,9 @@ export default function ClassDetailsPage({ params }) {
                   No teachers assigned to this class.
                 </div>
               ) : (
-                teachers.map((teacher) => (
+                teachers.map((teacher, idx) => (
                   <div key={teacher.id} className="list-item">
+                    <div>{idx + 1}</div>
                     <div>{teacher.name}</div>
                     <div>{teacher.subject || "-"}</div>
                   </div>

@@ -10,22 +10,38 @@ export default function AppRoot() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState(null);
 
+  // Restore user from localStorage on mount
   useEffect(() => {
     setIsMounted(true);
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      try {
+        const parsed = JSON.parse(storedUser);
+        setUser(parsed);
+        setIsLoggedIn(true);
+      } catch {}
+    }
   }, []);
 
   const handleLogin = (userData) => {
     setUser(userData);
     setIsLoggedIn(true);
+    localStorage.setItem("user", JSON.stringify(userData));
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
     setUser(null);
+    localStorage.removeItem("user");
   };
 
   if (!isMounted) {
     return null;
+  }
+
+  // Safety check: if user or user.role is missing, show login
+  if (!user || !user.role) {
+    return <LoginPage onLogin={handleLogin} />;
   }
 
   return isLoggedIn ? (

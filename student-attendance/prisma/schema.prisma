@@ -25,14 +25,12 @@ model Department {
 model Class {
   id           Int         @id @default(autoincrement())
   name         String
-  teacherId    Int
   departmentId Int
 
-  teacher      User       @relation("TeacherClasses", fields: [teacherId], references: [id])
   department   Department @relation(fields: [departmentId], references: [id])
-
   attendance   Attendance[]
   students     Student[]
+  classTeachers ClassTeacher[]
 
   @@unique([name, departmentId])
 }
@@ -45,20 +43,35 @@ model User {
   mobile    String  @unique
   password  String
   role      String  // 'admin', 'teacher', 'student'
-  classesTaught Class[] @relation("TeacherClasses")
-  Attendance Attendance[]
+  classTeachers ClassTeacher[]
+}
+// Join table for teachers assigned to classes with subjects
+model ClassTeacher {
+  id        Int    @id @default(autoincrement())
+  classId   Int
+  teacherId Int
+  subject   String
+
+  class     Class  @relation(fields: [classId], references: [id])
+  teacher   User   @relation(fields: [teacherId], references: [id])
+
+  @@unique([classId, teacherId, subject])
 }
 
 model Attendance {
-  id        Int      @id @default(autoincrement())
-  date      DateTime
-  userId    Int
-  classId   Int
-  status    String   // 'present', 'absent', etc.
-  user      User     @relation(fields: [userId], references: [id])
-  class     Class    @relation(fields: [classId], references: [id])
-}
+  id            Int      @id @default(autoincrement())
+  date          DateTime
+  studentId     Int
+  classId       Int
+  status        String
+  absenceReason String?
+  informed      Boolean?
 
+  student Student @relation(fields: [studentId], references: [id])
+  class   Class   @relation(fields: [classId], references: [id])
+
+  @@unique([studentId, date])
+}
 // Enum for student residence type
 enum ResidenceType {
   H   // Hosteller
@@ -74,4 +87,5 @@ model Student {
   residence    ResidenceType
   classId      Int
   class        Class         @relation(fields: [classId], references: [id])
+  attendance   Attendance[]
 }

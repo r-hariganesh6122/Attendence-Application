@@ -14,11 +14,15 @@ export async function GET(request) {
         { status: 400 },
       );
     }
-    // Find all classes taught by this teacher
-    const classes = await prisma.class.findMany({
+    // Find all classes taught by this teacher using ClassTeacher join table
+    const classTeachers = await prisma.classTeacher.findMany({
       where: { teacherId: Number(teacherId) },
-      select: { id: true, name: true },
+      include: { class: true },
     });
+    const classes = classTeachers.map((ct) => ({
+      id: ct.class.id,
+      name: ct.class.name,
+    }));
     return NextResponse.json({ success: true, departments: classes });
   } catch (error) {
     return NextResponse.json(

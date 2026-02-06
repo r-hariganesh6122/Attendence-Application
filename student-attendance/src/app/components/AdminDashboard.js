@@ -134,20 +134,49 @@ export default function AdminDashboard({ user, onLogout }) {
   const generateReport = async () => {
     const report = {};
     for (const dept of departments) {
-      // Fetch students for this department
-      const res = await fetch(`/api/students?departmentId=${dept.id}`);
-      const data = await res.json();
-      const students = data.success ? data.students : [];
-      if (students.length > 0) {
-        // Simulate some absences
-        const absences = students
-          .filter((_, idx) => idx % 3 === 0)
-          .map((s) => ({
-            name: s.name,
-            rollNo: s.rollNo || s.id,
-            reason: "Medical leave",
-          }));
-        report[dept.name] = absences;
+      // Fetch all classes in this department
+      const resClasses = await fetch(`/api/classes?departmentId=${dept.id}`);
+      const dataClasses = await resClasses.json();
+      const classes = dataClasses.success ? dataClasses.classes : [];
+      report[dept.name] = {};
+      for (const classItem of classes) {
+        // Fetch attendance for this class for today (or a selected date)
+        const today = new Date().toISOString().split("T")[0];
+        const resAttendance = await fetch(
+          `/api/attendance?classId=${classItem.id}&from=${today}&to=${today}`,
+        );
+        let dataAttendance = {};
+        try {
+          dataAttendance = await resAttendance.json();
+        } catch {
+          dataAttendance = { success: false, error: "Invalid JSON response" };
+        }
+        let absences = [];
+        if (dataAttendance.success) {
+          const { students, attendanceRecords } = dataAttendance;
+          // Map studentId to student info
+          const studentMap = {};
+          students.forEach((s) => {
+            studentMap[s.id] = s;
+          });
+          // Group absences for this class
+          attendanceRecords
+            .filter((r) => r.status === "absent")
+            .forEach((rec) => {
+              absences.push({
+                rollNo: studentMap[rec.studentId]?.rollNo || rec.studentId,
+                name: studentMap[rec.studentId]?.studentName || "",
+                residence: studentMap[rec.studentId]?.residence || "",
+                reason: rec.absenceReason || "",
+                informed: rec.informed || "",
+                leavesTaken: attendanceRecords.filter(
+                  (r2) =>
+                    r2.studentId === rec.studentId && r2.status === "absent",
+                ).length,
+              });
+            });
+        }
+        report[dept.name][classItem.name] = absences;
       }
     }
     return report;
@@ -155,7 +184,155 @@ export default function AdminDashboard({ user, onLogout }) {
 
   // Print Absence Report (async)
   const printReport = async () => {
-    const report = await generateReport();
+    // Fetch today's attendance data for print report
+    // Fetch all attendance records for today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    try {
+      const report = await generateReport();
+      let printContent = `
+        <html>
+          <head>
+            <title>Absence Report - ${new Date().toLocaleDateString()}</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                line-height: 1.6;
+              }
+              h1 {
+                text-align: center;
+                color: #333;
+                margin-bottom: 10px;
+              }
+              .date {
+                text-align: center;
+                color: #666;
+                margin-bottom: 20px;
+                font-size: 14px;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 30px;
+              }
+              th {
+                background-color: #34495e;
+                color: white;
+                padding: 12px;
+                text-align: left;
+                border: 1px solid #333;
+                font-weight: bold;
+              }
+              td {
+                padding: 10px 12px;
+                border: 1px solid #bbb;
+                text-align: left;
+              }
+              tr:nth-child(even) {
+                background-color: #f9f9f9;
+              }
+              tr:hover {
+                background-color: #ecf0f1;
+              }
+              .department-header {
+                background-color: #000000;
+                color: black;
+                font-size: 24px;
+                font-weight: 900;
+                padding: 15px;
+                margin-top: 20px;
+                margin-bottom: 10px;
+              }
+              @media print {
+                body { margin: 10px; }
+                table { page-break-inside: avoid; }
+              }
+            </style>
+          </head>
+          <body>
+            <h1>Absence Report</h1>
+            <div class="date">Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
+      `;
+      Object.entries(report).forEach(([deptName, absencesByClass]) => {
+        printContent += `<div class="department-header">${deptName}</div>`;
+        Object.entries(absencesByClass).forEach(([className, absences]) => {
+          printContent += `<div style="font-size:20px;font-weight:bold;margin:10px 0;">Class: ${className}</div>`;
+          if (absences.length > 0) {
+            printContent += `
+              <table>
+                <thead>
+                  <tr>
+                    <th>S No</th>
+                    <th>Roll No</th>
+                    <th>Name</th>
+                    <th>Residence</th>
+                    <th>Absence Reason</th>
+                    <th>Status</th>
+                    <th>Leaves Taken</th>
+                  </tr>
+                </thead>
+                <tbody>
+            `;
+            absences.forEach((student, idx) => {
+              // Status: Informed or Not Informed
+              let status = "Not Informed";
+              if (typeof student.informed === "string") {
+                status =
+                  student.informed.toLowerCase() === "informed"
+                    ? "Informed"
+                    : "Not Informed";
+              } else if (student.informed === true) {
+                status = "Informed";
+              }
+              printContent += `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td>${student.rollNo}</td>
+                  <td>${student.name}</td>
+                  <td>${student.residence || ""}</td>
+                  <td>${student.reason || ""}</td>
+                  <td>${status}</td>
+                  <td>${student.leavesTaken || 0}</td>
+                </tr>
+              `;
+            });
+            printContent += `
+                </tbody>
+              </table>
+            `;
+          } else {
+            printContent += `<p style="color: #27ae60; padding: 10px;">No absences</p>`;
+          }
+        });
+      });
+      printContent += `
+          </body>
+        </html>
+      `;
+      // Clean up any references after printing
+      setTimeout(() => {}, 0);
+      const printWindow = window.open("", "", "width=900,height=600");
+      if (!printWindow) {
+        alert(
+          "Failed to open print window. Please check your browser settings.",
+        );
+        return;
+      }
+      if (!printWindow.document) {
+        alert(
+          "Print window document is not accessible. Please check your browser settings.",
+        );
+        return;
+      }
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.print();
+    } catch (error) {
+      alert(
+        "Failed to generate report. Please check attendance data and try again.",
+      );
+    }
     let printContent = `
       <html>
         <head>
@@ -221,40 +398,7 @@ export default function AdminDashboard({ user, onLogout }) {
           <div class="date">Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
     `;
 
-    Object.entries(report).forEach(([deptName, absences]) => {
-      printContent += `<div class="department-header">${deptName}</div>`;
-
-      if (absences.length > 0) {
-        printContent += `
-          <table>
-            <thead>
-              <tr>
-                <th>Roll No</th>
-                <th>Student Name</th>
-                <th>Reason for Absence</th>
-              </tr>
-            </thead>
-            <tbody>
-        `;
-
-        absences.forEach((student) => {
-          printContent += `
-            <tr>
-              <td>${student.rollNo}</td>
-              <td>${student.name}</td>
-              <td>${student.reason}</td>
-            </tr>
-          `;
-        });
-
-        printContent += `
-            </tbody>
-          </table>
-        `;
-      } else {
-        printContent += `<p style="color: #27ae60; padding: 10px;">No absences</p>`;
-      }
-    });
+    // ...existing code...
 
     printContent += `
         </body>

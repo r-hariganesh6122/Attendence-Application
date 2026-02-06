@@ -74,7 +74,7 @@ async function seedDepartmentsAndClasses() {
             create: {
               name: `${dept}-${cls}`,
               departmentId: department.id,
-              teacherId,
+              // teacherId removed, handled by ClassTeacher table
             },
           });
         }
@@ -90,7 +90,7 @@ async function seedDepartmentsAndClasses() {
           create: {
             name: dept,
             departmentId: department.id,
-            teacherId,
+            // teacherId removed, handled by ClassTeacher table
           },
         });
       }
