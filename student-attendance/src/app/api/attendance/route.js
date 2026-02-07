@@ -1,3 +1,57 @@
+// POST /api/attendance
+export async function POST(request) {
+  try {
+    const body = await request.json();
+
+    let { classId, date, records } = body;
+    if (!classId || !date || !Array.isArray(records)) {
+      return NextResponse.json(
+        { success: false, message: "Missing required fields" },
+        { status: 400 },
+      );
+    }
+    classId = parseInt(classId, 10);
+    if (isNaN(classId)) {
+      return NextResponse.json(
+        { success: false, message: "classId must be an integer" },
+        { status: 400 },
+      );
+    }
+
+    // Remove existing attendance records for this class and date
+    await prisma.attendance.deleteMany({
+      where: {
+        classId,
+        date: new Date(date + "T00:00:00.000Z"),
+      },
+    });
+
+    // Normalize all record keys to correct Prisma field names (force only correct keys)
+    const normalizedRecords = records.map((rec) => {
+      let studentId = rec.studentId || rec.studentid || rec.studentld;
+      return {
+        classId: classId,
+        studentId: studentId,
+        date: new Date(date + "T00:00:00.000Z"),
+        status: rec.absent ? "absent" : "present",
+        absenceReason: rec.reason || rec.absenceReason || null,
+        informed: !!rec.informed,
+      };
+    });
+
+    const created = await prisma.attendance.createMany({
+      data: normalizedRecords,
+      skipDuplicates: false,
+    });
+
+    return NextResponse.json({ success: true, count: created.count });
+  } catch (error) {
+    return NextResponse.json(
+      { success: false, message: error.message },
+      { status: 500 },
+    );
+  }
+}
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 

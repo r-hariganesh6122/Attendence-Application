@@ -127,18 +127,34 @@ function TeacherDashboard({ user, onLogout }) {
 
   const handleSubmit = () => {
     const attendanceRecord = {
-      departmentId: selectedDepartmentId,
-      departmentName: currentDepartment?.name,
+      classId: selectedDepartmentId,
       date: selectedDate.toISOString().split("T")[0],
-      timestamp: new Date().toISOString(),
       records: students.map((student) => ({
         studentId: student.id,
-        name: student.name,
-        ...attendance[student.id],
+        absent: attendance[student.id]?.absent || false,
+        informed: attendance[student.id]?.informed || false,
+        reason: attendance[student.id]?.reason || "",
       })),
     };
-    console.log("Attendance Record:", attendanceRecord);
-    alert("Attendance submitted successfully!");
+    fetch("/api/attendance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(attendanceRecord),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          alert("Attendance submitted successfully!");
+          // Optionally, refetch attendance to update UI
+        } else {
+          alert(
+            "Failed to submit attendance: " + (data.message || "Unknown error"),
+          );
+        }
+      })
+      .catch((err) => {
+        alert("Failed to submit attendance: " + err.message);
+      });
   };
 
   return (
