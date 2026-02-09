@@ -121,7 +121,6 @@ export default function LoginPage({ onLogin }) {
             Login
           </button>
         </form>
-
       </div>
     </div>
   );
