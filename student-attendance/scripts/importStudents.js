@@ -62,7 +62,8 @@ async function importStudents() {
           !rollNo ||
           !studentName ||
           rollNo.toLowerCase().includes("roll") ||
-          studentName.toLowerCase().includes("name")
+          studentName.toLowerCase().includes("name") ||
+          regNo.includes("ACADEMIC COORDINATOR")
         )
           continue;
         try {

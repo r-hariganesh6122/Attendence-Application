@@ -4,6 +4,38 @@ import { useRouter } from "next/navigation";
 import "../attendance.css";
 
 export default function AdminDashboard({ user, onLogout }) {
+  // State for change password form
+  const [changePasswordMobile, setChangePasswordMobile] = useState("");
+  const [changePasswordNew, setChangePasswordNew] = useState("");
+
+  // Handler for change password
+  const handleChangePassword = async () => {
+    if (!changePasswordMobile.trim() || !changePasswordNew.trim()) {
+      alert("Please enter both mobile number and new password");
+      return;
+    }
+    try {
+      const res = await fetch("/api/teachers", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mobile: changePasswordMobile,
+          password: changePasswordNew,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Password changed successfully!");
+        setChangePasswordMobile("");
+        setChangePasswordNew("");
+        fetchTeachers();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to change password: " + error.message);
+    }
+  };
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("management");
   const [selectedProgram, setSelectedProgram] = useState("BE");
@@ -25,9 +57,8 @@ export default function AdminDashboard({ user, onLogout }) {
   // Form states for adding new items
   const [newTeacher, setNewTeacher] = useState({
     name: "",
-    email: "",
-    phone: "",
-    departmentId: "",
+    mobile: "",
+    password: "",
   });
 
   // Search state for teachers
@@ -35,28 +66,81 @@ export default function AdminDashboard({ user, onLogout }) {
   const [selectedTeacherToRemove, setSelectedTeacherToRemove] = useState("");
 
   // Teacher Management
+  const fetchTeachers = async () => {
+    try {
+      const res = await fetch("/api/teachers");
+      const data = await res.json();
+      if (data.success) {
+        setTeachers(data.teachers);
+      }
+    } catch (error) {
+      console.error("Failed to fetch teachers:", error);
+    }
+  };
+
   const addTeacher = async () => {
     if (
-      newTeacher.name &&
-      newTeacher.email &&
-      newTeacher.phone &&
-      newTeacher.departmentId
+      !newTeacher.name.trim() ||
+      !newTeacher.mobile.trim() ||
+      !newTeacher.password.trim()
     ) {
-      // TODO: Implement API call to add teacher
-      // After successful add, refetch teachers
-      setNewTeacher({
-        name: "",
-        email: "",
-        phone: "",
-        departmentId: "",
+      alert("Please fill in all fields");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/teachers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newTeacher),
       });
+      const data = await res.json();
+
+      if (data.success) {
+        alert("Teacher added successfully!");
+        setNewTeacher({
+          name: "",
+          mobile: "",
+          password: "",
+        });
+        fetchTeachers();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to add teacher: " + error.message);
     }
   };
 
   const deleteTeacher = async (teacherId) => {
-    // TODO: Implement API call to delete teacher
-    // After successful delete, refetch teachers
+    if (!confirm("Are you sure you want to delete this teacher?")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/teachers?teacherId=${teacherId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert("Teacher deleted successfully!");
+        setSelectedTeacherToRemove("");
+        fetchTeachers();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to delete teacher: " + error.message);
+    }
   };
+
+  // Fetch teachers on component mount
+  useEffect(() => {
+    if (activeTab === "teachers") {
+      fetchTeachers();
+    }
+  }, [activeTab]);
 
   // Fetch departments for selected program
   useEffect(() => {
@@ -520,7 +604,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 type="text"
                 value={teacherSearch}
                 onChange={(e) => setTeacherSearch(e.target.value)}
-                placeholder="Search teachers by name, email, or department..."
+                placeholder="Search teachers by name or mobile..."
                 className="search-input"
                 style={{
                   width: "100%",
@@ -536,33 +620,52 @@ export default function AdminDashboard({ user, onLogout }) {
             <div className="data-list">
               <div className="list-header">
                 <div>Teacher Name</div>
-                <div>Email</div>
-                <div>Phone</div>
-                <div>Department</div>
+                <div>Mobile</div>
+                <div>Password</div>
               </div>
               {teachers
                 .filter((teacher) => {
                   const search = teacherSearch.toLowerCase();
-                  const dept = departments.find(
-                    (d) => d.id === teacher.departmentId,
-                  );
                   return (
                     teacher.name.toLowerCase().includes(search) ||
-                    teacher.email.toLowerCase().includes(search) ||
-                    dept?.name.toLowerCase().includes(search)
+                    teacher.mobile.toLowerCase().includes(search)
                   );
                 })
                 .map((teacher) => (
                   <div key={teacher.id} className="list-item">
                     <div>{teacher.name}</div>
-                    <div>{teacher.email}</div>
-                    <div>{teacher.phone}</div>
-                    <div>
-                      {departments.find((d) => d.id === teacher.departmentId)
-                        ?.name || "Unknown"}
-                    </div>
+                    <div>{teacher.mobile}</div>
+                    <div>{teacher.password}</div>
                   </div>
                 ))}
+            </div>
+
+            {/* Change Password Section - now below teachers list */}
+            <div className="form-section" style={{ marginTop: "30px" }}>
+              <h3>Change Password</h3>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label>Mobile Number</label>
+                  <input
+                    type="tel"
+                    value={changePasswordMobile || ""}
+                    onChange={(e) => setChangePasswordMobile(e.target.value)}
+                    placeholder="Enter teacher mobile number"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>New Password</label>
+                  <input
+                    type="password"
+                    value={changePasswordNew || ""}
+                    onChange={(e) => setChangePasswordNew(e.target.value)}
+                    placeholder="Enter new password"
+                  />
+                </div>
+              </div>
+              <button onClick={handleChangePassword} className="add-btn">
+                Change Password
+              </button>
             </div>
 
             {/* Add New Teacher - At the bottom */}
@@ -584,50 +687,32 @@ export default function AdminDashboard({ user, onLogout }) {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Email</label>
+                  <label>Mobile Number</label>
                   <input
-                    type="email"
-                    value={newTeacher.email}
+                    type="tel"
+                    value={newTeacher.mobile}
                     onChange={(e) =>
                       setNewTeacher({
                         ...newTeacher,
-                        email: e.target.value,
+                        mobile: e.target.value,
                       })
                     }
-                    placeholder="Enter email"
+                    placeholder="Enter mobile number"
                   />
                 </div>
                 <div className="form-group">
-                  <label>Phone</label>
+                  <label>Password</label>
                   <input
-                    type="text"
-                    value={newTeacher.phone}
+                    type="password"
+                    value={newTeacher.password}
                     onChange={(e) =>
                       setNewTeacher({
                         ...newTeacher,
-                        phone: e.target.value,
+                        password: e.target.value,
                       })
                     }
-                    placeholder="Enter phone number"
+                    placeholder="Enter password"
                   />
-                </div>
-                <div className="form-group">
-                  <label>Department</label>
-                  <select
-                    value={newTeacher.departmentId}
-                    onChange={(e) =>
-                      setNewTeacher({
-                        ...newTeacher,
-                        departmentId: e.target.value,
-                      })
-                    }
-                  >
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.id}>
-                        {dept.name} - {dept.program}
-                      </option>
-                    ))}
-                  </select>
                 </div>
               </div>
               <button onClick={addTeacher} className="add-btn">
@@ -691,7 +776,7 @@ export default function AdminDashboard({ user, onLogout }) {
                                 : "#fff")
                           }
                         >
-                          {teacher.name} ({teacher.email})
+                          {teacher.name} ({teacher.mobile})
                         </div>
                       ))}
                     {teachers.filter((teacher) =>

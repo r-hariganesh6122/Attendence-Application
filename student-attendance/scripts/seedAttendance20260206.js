@@ -21,16 +21,12 @@ function randomReason() {
   return reasons[Math.floor(Math.random() * reasons.length)];
 }
 
-async function seedAttendance() {
+async function seedAttendance20260206() {
   const students = await prisma.student.findMany();
-  // Use local date (YYYY-MM-DD) for attendance
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  const todayString = `${yyyy}-${mm}-${dd}`;
-  const today = new Date(todayString);
+  // Fixed date: February 8, 2026
+  const attendanceDate = new Date("2026-02-08T00:00:00.000Z");
 
+  let count = 0;
   for (const student of students) {
     const status = randomStatus();
     let informed = null;
@@ -43,7 +39,7 @@ async function seedAttendance() {
 
     await prisma.attendance.create({
       data: {
-        date: today,
+        date: attendanceDate,
         studentId: student.id,
         classId: student.classId,
         status,
@@ -55,10 +51,12 @@ async function seedAttendance() {
     console.log(
       `Attendance for ${student.studentName} (${status}${status === "absent" ? ", " + (informed ? "Informed" : "Not Informed") : ""})`,
     );
+    count++;
   }
 
-  await prisma.$disconnect();
-  console.log("Attendance seeding complete.");
+  console.log(
+    `✓ Attendance seeding for 2026-02-06 complete. Total: ${count} records`,
+  );
 }
 
-module.exports = seedAttendance;
+module.exports = seedAttendance20260206;

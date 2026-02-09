@@ -6,7 +6,7 @@ import "../login.css";
 
 export default function LoginPage({ onLogin }) {
   const [role, setRole] = useState(""); // "teacher" or "admin"
-  const [email, setEmail] = useState("");
+  const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
@@ -19,8 +19,8 @@ export default function LoginPage({ onLogin }) {
       return;
     }
 
-    if (!email.trim()) {
-      setError("Please enter your email");
+    if (!mobile.trim()) {
+      setError("Please enter your mobile number");
       return;
     }
 
@@ -33,7 +33,7 @@ export default function LoginPage({ onLogin }) {
     fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier: email, password, role }),
+      body: JSON.stringify({ identifier: mobile, password, role }),
     })
       .then((res) => res.json())
       .then((data) => {
@@ -41,7 +41,7 @@ export default function LoginPage({ onLogin }) {
           setError("");
           onLogin(data.user);
         } else {
-          setError(data.message || "Invalid email or password");
+          setError(data.message || "Invalid mobile or password");
         }
       })
       .catch(() => setError("Server error. Please try again later."));
@@ -87,15 +87,15 @@ export default function LoginPage({ onLogin }) {
           </div>
 
           <div className="form-group">
-            <label htmlFor="email" className="form-label">
-              Email
+            <label htmlFor="mobile" className="form-label">
+              Mobile Number
             </label>
             <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
+              type="tel"
+              id="mobile"
+              value={mobile}
+              onChange={(e) => setMobile(e.target.value)}
+              placeholder="Enter your mobile number"
               className="form-input"
               autoFocus
             />
@@ -122,13 +122,15 @@ export default function LoginPage({ onLogin }) {
           </button>
         </form>
 
-        <p className="login-footer">
-          {role === "teacher"
-            ? "Demo: rajesh@college.edu / teach123 or priya@college.edu / teach123"
-            : role === "admin"
-              ? "Demo: admin@college.edu / admin123"
-              : "Select a role to see demo credentials"}
-        </p>
+        <div className="demo-credentials">
+          <h3>Demo Credentials</h3>
+          <p>
+            <strong>Teacher:</strong> Mobile: 9999999999 | Password: password
+          </p>
+          <p>
+            <strong>Admin:</strong> Mobile: 8888888888 | Password: adminpassword
+          </p>
+        </div>
       </div>
     </div>
   );

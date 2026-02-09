@@ -6,17 +6,17 @@ const prisma = new PrismaClient();
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { identifier, password } = body; // identifier = email or mobile
+    const { identifier, password } = body; // identifier = mobile
     if (!identifier || !password) {
       return NextResponse.json(
         { success: false, message: "Missing credentials" },
         { status: 400 },
       );
     }
-    // Find user by email or mobile
+    // Find user by mobile
     const user = await prisma.user.findFirst({
       where: {
-        OR: [{ email: identifier }, { mobile: identifier }],
+        mobile: identifier,
       },
     });
     if (!user) {

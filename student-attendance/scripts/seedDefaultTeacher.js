@@ -1,18 +1,19 @@
 const { PrismaClient } = require("@prisma/client");
+const { generateRandomPassword } = require("./passwordUtils");
 const prisma = new PrismaClient();
 
 async function seedDefaultTeacher() {
-  await prisma.user.upsert({
-    where: { email: "default.teacher@example.com" },
+  const result = await prisma.user.upsert({
+    where: { mobile: "9999999999" },
     update: {},
     create: {
       name: "Default Teacher",
-      email: "default.teacher@example.com",
       mobile: "9999999999",
-      password: "password",
+      password: generateRandomPassword(),
       role: "teacher",
     },
   });
+  console.log(`✓ Default teacher seeded (Password: ${result.password})`);
 }
 
 module.exports = seedDefaultTeacher;

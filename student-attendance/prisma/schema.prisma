@@ -35,11 +35,17 @@ model Class {
   @@unique([name, departmentId])
 }
 
+// Course model to store course details with unique code
+model Course {
+  id         Int    @id @default(autoincrement())
+  courseCode String @unique
+  subject    String
+  classTeachers ClassTeacher[]
+}
 
 model User {
   id        Int     @id @default(autoincrement())
   name      String
-  email     String  @unique
   mobile    String  @unique
   password  String
   role      String  // 'admin', 'teacher', 'student'
@@ -47,15 +53,16 @@ model User {
 }
 // Join table for teachers assigned to classes with subjects
 model ClassTeacher {
-  id        Int    @id @default(autoincrement())
-  classId   Int
-  teacherId Int
-  subject   String
+  id         Int    @id @default(autoincrement())
+  classId    Int
+  teacherId  Int
+  courseId   Int
 
-  class     Class  @relation(fields: [classId], references: [id])
-  teacher   User   @relation(fields: [teacherId], references: [id])
+  class      Class   @relation(fields: [classId], references: [id])
+  teacher    User    @relation(fields: [teacherId], references: [id])
+  course     Course  @relation(fields: [courseId], references: [id])
 
-  @@unique([classId, teacherId, subject])
+  @@unique([classId, teacherId, courseId])
 }
 
 model Attendance {

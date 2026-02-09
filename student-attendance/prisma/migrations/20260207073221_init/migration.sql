@@ -28,15 +28,23 @@ CREATE TABLE `Class` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `Course` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `courseCode` VARCHAR(191) NOT NULL,
+    `subject` VARCHAR(191) NOT NULL,
+
+    UNIQUE INDEX `Course_courseCode_key`(`courseCode`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `User` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(191) NOT NULL,
-    `email` VARCHAR(191) NOT NULL,
     `mobile` VARCHAR(191) NOT NULL,
     `password` VARCHAR(191) NOT NULL,
     `role` VARCHAR(191) NOT NULL,
 
-    UNIQUE INDEX `User_email_key`(`email`),
     UNIQUE INDEX `User_mobile_key`(`mobile`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -46,9 +54,9 @@ CREATE TABLE `ClassTeacher` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `classId` INTEGER NOT NULL,
     `teacherId` INTEGER NOT NULL,
-    `subject` VARCHAR(191) NOT NULL,
+    `courseId` INTEGER NOT NULL,
 
-    UNIQUE INDEX `ClassTeacher_classId_teacherId_subject_key`(`classId`, `teacherId`, `subject`),
+    UNIQUE INDEX `ClassTeacher_classId_teacherId_courseId_key`(`classId`, `teacherId`, `courseId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -89,6 +97,9 @@ ALTER TABLE `ClassTeacher` ADD CONSTRAINT `ClassTeacher_classId_fkey` FOREIGN KE
 
 -- AddForeignKey
 ALTER TABLE `ClassTeacher` ADD CONSTRAINT `ClassTeacher_teacherId_fkey` FOREIGN KEY (`teacherId`) REFERENCES `User`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `ClassTeacher` ADD CONSTRAINT `ClassTeacher_courseId_fkey` FOREIGN KEY (`courseId`) REFERENCES `Course`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Attendance` ADD CONSTRAINT `Attendance_studentId_fkey` FOREIGN KEY (`studentId`) REFERENCES `Student`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

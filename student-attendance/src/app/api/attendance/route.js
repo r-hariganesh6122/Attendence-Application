@@ -1,3 +1,8 @@
+import { NextResponse } from "next/server";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+
 // POST /api/attendance
 export async function POST(request) {
   try {
@@ -52,28 +57,83 @@ export async function POST(request) {
     );
   }
 }
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
-
-// GET /api/attendance?classId=...&from=YYYY-MM-DD&to=YYYY-MM-DD
+// GET /api/attendance?classId=...&from=YYYY-MM-DD&to=YYYY-MM-DD OR ?studentId=...
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  const classId = parseInt(searchParams.get("classId"));
+  const classId = searchParams.get("classId");
+  const studentId = searchParams.get("studentId");
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
+  // If studentId is provided, fetch student's attendance
+  if (studentId) {
+    const numStudentId = parseInt(studentId);
+    if (isNaN(numStudentId)) {
+      return NextResponse.json(
+        { success: false, message: "Invalid studentId" },
+        { status: 400 },
+      );
+    }
+
+    // Get student info
+    const student = await prisma.student.findUnique({
+      where: { id: numStudentId },
+      select: {
+        id: true,
+        studentName: true,
+        regNo: true,
+        rollNo: true,
+        classId: true,
+      },
+    });
+
+    if (!student) {
+      return NextResponse.json(
+        { success: false, message: "Student not found" },
+        { status: 404 },
+      );
+    }
+
+    // Get student's attendance records
+    const attendance = await prisma.attendance.findMany({
+      where: { studentId: numStudentId },
+      select: {
+        id: true,
+        date: true,
+        status: true,
+        absenceReason: true,
+        informed: true,
+      },
+      orderBy: { date: "desc" },
+    });
+
+    return NextResponse.json({
+      success: true,
+      student,
+      attendance,
+    });
+  }
+
+  // Original classId-based query
   if (!classId) {
     return NextResponse.json(
-      { success: false, message: "classId required" },
+      { success: false, message: "classId or studentId required" },
+      { status: 400 },
+    );
+  }
+
+  const numClassId = parseInt(classId);
+  if (isNaN(numClassId)) {
+    return NextResponse.json(
+      { success: false, message: "Invalid classId" },
       { status: 400 },
     );
   }
 
   // Fetch students in the class
   const students = await prisma.student.findMany({
-    where: { classId },
+    where: { classId: numClassId },
     select: {
       id: true,
       rollNo: true,
@@ -89,7 +149,7 @@ export async function GET(request) {
     // Filter by date only (YYYY-MM-DD)
     attendanceRecords = await prisma.attendance.findMany({
       where: {
-        classId,
+        classId: numClassId,
         AND: [
           {
             date: {
@@ -110,7 +170,7 @@ export async function GET(request) {
     });
   } else {
     attendanceRecords = await prisma.attendance.findMany({
-      where: { classId },
+      where: { classId: numClassId },
       select: {
         id: true,
         date: true,

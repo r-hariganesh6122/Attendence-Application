@@ -1,18 +1,19 @@
 const { PrismaClient } = require("@prisma/client");
+const { generateRandomPassword } = require("./passwordUtils");
 const prisma = new PrismaClient();
 
 async function seedAdmin() {
-  await prisma.user.upsert({
-    where: { email: "admin@example.com" },
+  const result = await prisma.user.upsert({
+    where: { mobile: "8888888888" },
     update: {},
     create: {
       name: "Admin",
-      email: "admin@example.com",
       mobile: "8888888888",
-      password: "adminpassword",
+      password: generateRandomPassword(),
       role: "admin",
     },
   });
+  console.log(`✓ Admin seeded (Password: ${result.password})`);
 }
 
 module.exports = seedAdmin;
