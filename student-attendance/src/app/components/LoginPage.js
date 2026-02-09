@@ -122,15 +122,6 @@ export default function LoginPage({ onLogin }) {
           </button>
         </form>
 
-        <div className="demo-credentials">
-          <h3>Demo Credentials</h3>
-          <p>
-            <strong>Teacher:</strong> Mobile: 9999999999 | Password: password
-          </p>
-          <p>
-            <strong>Admin:</strong> Mobile: 8888888888 | Password: adminpassword
-          </p>
-        </div>
       </div>
     </div>
   );
