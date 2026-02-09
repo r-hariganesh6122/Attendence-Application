@@ -805,7 +805,7 @@ export default function AdminDashboard({ user, onLogout }) {
                     alert("Teacher not found");
                   }
                 }}
-                className="delete-btn"
+                className="add-btn"
                 disabled={!selectedTeacherToRemove.trim()}
               >
                 Remove Teacher
