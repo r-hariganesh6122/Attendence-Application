@@ -23,8 +23,8 @@ function randomReason() {
 
 async function seedAttendance20260206() {
   const students = await prisma.student.findMany();
-  // Fixed date: February 8, 2026
-  const attendanceDate = new Date("2026-02-08T00:00:00.000Z");
+  // Fixed date: February 9, 2026
+  const attendanceDate = new Date("2026-02-09T00:00:00.000Z");
 
   let count = 0;
   for (const student of students) {
@@ -55,7 +55,7 @@ async function seedAttendance20260206() {
   }
 
   console.log(
-    `✓ Attendance seeding for 2026-02-06 complete. Total: ${count} records`,
+    `✓ Attendance seeding for 2026-02-09 complete. Total: ${count} records`,
   );
 }
 
