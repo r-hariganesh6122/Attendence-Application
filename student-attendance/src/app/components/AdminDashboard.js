@@ -619,6 +619,7 @@ export default function AdminDashboard({ user, onLogout }) {
             {/* Teacher List */}
             <div className="data-list">
               <div className="list-header">
+                <div>S.No</div>
                 <div>Teacher Name</div>
                 <div>Mobile</div>
                 <div>Password</div>
@@ -631,8 +632,9 @@ export default function AdminDashboard({ user, onLogout }) {
                     teacher.mobile.toLowerCase().includes(search)
                   );
                 })
-                .map((teacher) => (
+                .map((teacher, idx) => (
                   <div key={teacher.id} className="list-item">
+                    <div>{idx + 1}</div>
                     <div>{teacher.name}</div>
                     <div>{teacher.mobile}</div>
                     <div>{teacher.password}</div>
