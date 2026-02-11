@@ -60,14 +60,14 @@ export default function ClassDetailsPage({ params }) {
           courseCode: assignment.course.courseCode,
           courseName: assignment.course.subject,
           name: assignment.teacher.name,
-          mobile: assignment.teacher.mobileNo,
+          mobile: assignment.teacher.mobile,
           teacherId: assignment.teacher.id,
           courseId: assignment.course.id,
         }));
         setTeachers(mappedTeachers);
       }
       // Fetch courses
-      const resCourses = await fetch("/api/courses");
+      const resCourses = await fetch(`/api/courses?classId=${id}`);
       const dataCourses = await resCourses.json();
       setCourses(dataCourses.success ? dataCourses.courses : []);
       // Fetch all teachers
@@ -100,10 +100,10 @@ export default function ClassDetailsPage({ params }) {
     }
   };
 
-  // Fetch all courses
+  // Fetch all courses for this class
   const fetchCourses = async () => {
     try {
-      const res = await fetch("/api/courses");
+      const res = await fetch(`/api/courses?classId=${id}`);
       const data = await res.json();
       setCourses(data.success ? data.courses : []);
     } catch (error) {
@@ -228,7 +228,10 @@ export default function ClassDetailsPage({ params }) {
       const res = await fetch("/api/courses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newCourse),
+        body: JSON.stringify({
+          ...newCourse,
+          classId: parseInt(id),
+        }),
       });
       const data = await res.json();
 
@@ -291,7 +294,7 @@ export default function ClassDetailsPage({ params }) {
           courseCode: assignment.course.courseCode,
           courseName: assignment.course.subject,
           name: assignment.teacher.name,
-          mobile: assignment.teacher.mobileNo,
+          mobile: assignment.teacher.mobile,
           teacherId: assignment.teacher.id,
           courseId: assignment.course.id,
         }));
@@ -970,25 +973,51 @@ export default function ClassDetailsPage({ params }) {
                     <div>Teacher Name</div>
                     <div>Phone Number</div>
                   </div>
-                  {teachers.length === 0 ? (
+                  {courses.length === 0 ? (
                     <div className="list-item">
-                      No teachers assigned to this class.
+                      No courses available. Add a course first.
                     </div>
                   ) : (
-                    teachers.map((teacher, idx) => (
-                      <div
-                        key={String(
-                          teacher.classTeacherId || `${teacher.id}-${idx}`,
-                        )}
-                        className="list-item"
-                      >
-                        <div>{idx + 1}</div>
-                        <div>{teacher.courseCode || "-"}</div>
-                        <div>{teacher.courseName || "-"}</div>
-                        <div>{teacher.name}</div>
-                        <div>{teacher.mobile}</div>
-                      </div>
-                    ))
+                    courses
+                      .map((course) => {
+                        const assignedTeachers = teachers.filter(
+                          (t) => t.courseId === course.id,
+                        );
+
+                        if (assignedTeachers.length === 0) {
+                          return (
+                            <div
+                              key={course.id}
+                              className="list-item"
+                              style={{ backgroundColor: "#f9f9f9" }}
+                            >
+                              <div>{courses.indexOf(course) + 1}</div>
+                              <div>{course.courseCode}</div>
+                              <div>{course.subject}</div>
+                              <div>-</div>
+                              <div>-</div>
+                            </div>
+                          );
+                        }
+
+                        return assignedTeachers.map((teacher, idx) => (
+                          <div
+                            key={`${course.id}-${teacher.id}`}
+                            className="list-item"
+                          >
+                            <div>
+                              {courses.indexOf(course) + 1}
+                              {idx > 0 && "."}
+                              {idx > 0 && String.fromCharCode(97 + idx - 1)}
+                            </div>
+                            <div>{course.courseCode}</div>
+                            <div>{course.subject}</div>
+                            <div>{teacher.name}</div>
+                            <div>{teacher.mobile}</div>
+                          </div>
+                        ));
+                      })
+                      .flat()
                   )}
                 </div>
               )}

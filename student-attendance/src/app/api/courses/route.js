@@ -7,25 +7,31 @@ const prisma = new PrismaClient();
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { courseCode, subject } = body;
+    const { courseCode, subject, classId } = body;
 
-    if (!courseCode || !subject) {
+    if (!courseCode || !subject || !classId) {
       return NextResponse.json(
-        { success: false, message: "Course Code and Subject are required" },
+        {
+          success: false,
+          message: "Course Code, Subject, and classId are required",
+        },
         { status: 400 },
       );
     }
 
-    // Check if course with this code already exists
+    // Check if course with this code already exists for this class
     const existingCourse = await prisma.course.findFirst({
-      where: { courseCode },
+      where: {
+        courseCode,
+        classId: Number(classId),
+      },
     });
 
     if (existingCourse) {
       return NextResponse.json(
         {
           success: false,
-          message: "Course with this code already exists",
+          message: "Course with this code already exists in this class",
         },
         { status: 400 },
       );
@@ -36,11 +42,13 @@ export async function POST(request) {
       data: {
         courseCode,
         subject,
+        classId: Number(classId),
       },
       select: {
         id: true,
         courseCode: true,
         subject: true,
+        classId: true,
       },
     });
 
@@ -60,11 +68,16 @@ export async function POST(request) {
 // GET /api/courses
 export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const classId = searchParams.get("classId");
+
     const courses = await prisma.course.findMany({
+      where: classId ? { classId: Number(classId) } : undefined,
       select: {
         id: true,
         courseCode: true,
         subject: true,
+        classId: true,
       },
     });
     return NextResponse.json({ success: true, courses });

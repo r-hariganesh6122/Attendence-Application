@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { apiCall } from "@/lib/apiUtils";
 
 import "../attendance.css";
 
@@ -16,7 +17,7 @@ function TeacherDashboard({ user, onLogout }) {
   // Fetch teacher's departments (classes)
   useEffect(() => {
     if (!user?.id) return;
-    fetch(`/api/teacher-departments?teacherId=${user.id}`)
+    apiCall(`/api/teacher-departments?teacherId=${user.id}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.departments.length > 0) {
@@ -39,7 +40,7 @@ function TeacherDashboard({ user, onLogout }) {
     }
     async function fetchData() {
       // Fetch students
-      const resStudents = await fetch(
+      const resStudents = await apiCall(
         `/api/students?classId=${selectedDepartmentId}`,
       );
       const dataStudents = await resStudents.json();
@@ -47,7 +48,7 @@ function TeacherDashboard({ user, onLogout }) {
 
       // Fetch attendance records for selected date
       const dateStr = selectedDate.toISOString().split("T")[0];
-      const resAttendance = await fetch(
+      const resAttendance = await apiCall(
         `/api/attendance?classId=${selectedDepartmentId}&from=${dateStr}&to=${dateStr}`,
       );
       const dataAttendance = await resAttendance.json();
@@ -136,9 +137,8 @@ function TeacherDashboard({ user, onLogout }) {
         reason: attendance[student.id]?.reason || "",
       })),
     };
-    fetch("/api/attendance", {
+    apiCall("/api/attendance", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(attendanceRecord),
     })
       .then((res) => res.json())

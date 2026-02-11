@@ -1,23 +1,49 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { authenticateRequest } from "@/lib/authMiddleware";
+import {
+  validateStudentCreate,
+  validateStudentUpdate,
+  validateStudentDelete,
+} from "@/lib/validators/studentValidator";
 
 const prisma = new PrismaClient();
 
 // POST /api/students
 export async function POST(request) {
   try {
-    const body = await request.json();
-    const { rollNo, regNo, studentName, residence, classId } = body;
+    // Authenticate request
+    const user = await authenticateRequest(request);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized - Invalid or missing token" },
+        { status: 401 },
+      );
+    }
 
-    if (!rollNo || !regNo || !studentName || !classId) {
+    // Check authorization - only admin can create students
+    if (user.role !== "admin") {
       return NextResponse.json(
         {
           success: false,
-          message: "Roll No, Reg No, Student Name, and Class ID are required",
+          message: "Forbidden - Only admins can create students",
         },
+        { status: 403 },
+      );
+    }
+
+    const body = await request.json();
+
+    // Validate request body with Zod
+    const validation = validateStudentCreate(body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, message: validation.error },
         { status: 400 },
       );
     }
+
+    const { rollNo, regNo, studentName, residence, classId } = validation.data;
 
     // Check if student with this regNo already exists
     const existingStudent = await prisma.student.findFirst({
@@ -69,15 +95,44 @@ export async function POST(request) {
 // PUT /api/students
 export async function PUT(request) {
   try {
-    const body = await request.json();
-    const { id, rollNo, regNo, studentName, residence } = body;
-
-    if (!id) {
+    // Authenticate request
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
-        { success: false, message: "Student ID is required" },
+        { success: false, message: "Unauthorized - Invalid or missing token" },
+        { status: 401 },
+      );
+    }
+
+    // Check authorization - only admin can update students
+    if (user.role !== "admin") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Forbidden - Only admins can update students",
+        },
+        { status: 403 },
+      );
+    }
+
+    const body = await request.json();
+
+    // Validate request body with Zod
+    const validation = validateStudentUpdate(body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, message: validation.error },
         { status: 400 },
       );
     }
+
+    const {
+      studentId: id,
+      rollNo,
+      regNo,
+      studentName,
+      residence,
+    } = validation.data;
 
     // Update student
     const student = await prisma.student.update({
@@ -120,12 +175,36 @@ export async function PUT(request) {
 // DELETE /api/students
 export async function DELETE(request) {
   try {
+    // Authenticate request
+    const user = await authenticateRequest(request);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized - Invalid or missing token" },
+        { status: 401 },
+      );
+    }
+
+    // Check authorization - only admin can delete students
+    if (user.role !== "admin") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Forbidden - Only admins can delete students",
+        },
+        { status: 403 },
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const studentId = searchParams.get("studentId");
 
-    if (!studentId) {
+    // Validate studentId with Zod
+    const validation = validateStudentDelete({
+      studentId: parseInt(studentId),
+    });
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, message: "studentId is required" },
+        { success: false, message: validation.error },
         { status: 400 },
       );
     }
@@ -185,6 +264,7 @@ export async function GET(request) {
     });
     return NextResponse.json({ success: true, students });
   } catch (error) {
+    console.error("GET /api/students error:", error);
     return NextResponse.json(
       { success: false, message: "Failed to fetch students" },
       { status: 500 },

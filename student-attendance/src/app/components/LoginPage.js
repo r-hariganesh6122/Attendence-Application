@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { setToken } from "@/lib/apiUtils";
 
 import "../login.css";
 
@@ -33,12 +34,15 @@ export default function LoginPage({ onLogin }) {
     fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier: mobile, password, role }),
+      body: JSON.stringify({ mobile, password }),
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data.success) {
+        if (data.success && data.token) {
           setError("");
+          // Store JWT token
+          setToken(data.token);
+          // Pass user data to onLogin
           onLogin(data.user);
         } else {
           setError(data.message || "Invalid mobile or password");

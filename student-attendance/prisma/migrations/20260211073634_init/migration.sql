@@ -32,8 +32,9 @@ CREATE TABLE `Course` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `courseCode` VARCHAR(191) NOT NULL,
     `subject` VARCHAR(191) NOT NULL,
+    `classId` INTEGER NOT NULL,
 
-    UNIQUE INDEX `Course_courseCode_key`(`courseCode`),
+    UNIQUE INDEX `Course_classId_courseCode_key`(`classId`, `courseCode`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -42,7 +43,8 @@ CREATE TABLE `User` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(191) NOT NULL,
     `mobile` VARCHAR(191) NOT NULL,
-    `password` VARCHAR(191) NOT NULL,
+    `password` VARCHAR(191) NULL,
+    `passwordHash` VARCHAR(191) NULL,
     `role` VARCHAR(191) NOT NULL,
 
     UNIQUE INDEX `User_mobile_key`(`mobile`),
@@ -92,6 +94,9 @@ ALTER TABLE `Department` ADD CONSTRAINT `Department_programId_fkey` FOREIGN KEY 
 
 -- AddForeignKey
 ALTER TABLE `Class` ADD CONSTRAINT `Class_departmentId_fkey` FOREIGN KEY (`departmentId`) REFERENCES `Department`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Course` ADD CONSTRAINT `Course_classId_fkey` FOREIGN KEY (`classId`) REFERENCES `Class`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `ClassTeacher` ADD CONSTRAINT `ClassTeacher_classId_fkey` FOREIGN KEY (`classId`) REFERENCES `Class`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

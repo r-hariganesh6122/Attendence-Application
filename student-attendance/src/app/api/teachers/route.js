@@ -1,19 +1,49 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import { authenticateRequest } from "@/lib/authMiddleware";
+import {
+  validateTeacherCreate,
+  validateTeacherUpdate,
+  validateTeacherDelete,
+} from "@/lib/validators/teacherValidator";
 
 const prisma = new PrismaClient();
 
 export async function POST(request) {
   try {
-    const body = await request.json();
-    const { name, mobile, password } = body;
-
-    if (!name || !mobile || !password) {
+    // Authenticate request
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
-        { success: false, message: "Name, mobile, and password are required" },
+        { success: false, message: "Unauthorized - Invalid or missing token" },
+        { status: 401 },
+      );
+    }
+
+    // Check authorization - only admin can create teachers
+    if (user.role !== "admin") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Forbidden - Only admins can create teachers",
+        },
+        { status: 403 },
+      );
+    }
+
+    const body = await request.json();
+
+    // Validate request body with Zod
+    const validation = validateTeacherCreate(body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, message: validation.error },
         { status: 400 },
       );
     }
+
+    const { name, mobile, password } = validation.data;
 
     // Check if teacher with this mobile already exists
     const existingTeacher = await prisma.user.findUnique({
@@ -30,19 +60,22 @@ export async function POST(request) {
       );
     }
 
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     // Create new teacher
     const teacher = await prisma.user.create({
       data: {
         name,
         mobile,
-        password,
+        passwordHash: hashedPassword,
+        password: password, // Keep plaintext for migration period
         role: "teacher",
       },
       select: {
         id: true,
         name: true,
         mobile: true,
-        password: true,
       },
     });
 
@@ -52,6 +85,7 @@ export async function POST(request) {
       teacher,
     });
   } catch (error) {
+    console.error("POST /api/teachers error:", error);
     return NextResponse.json(
       { success: false, message: error.message },
       { status: 500 },
@@ -61,20 +95,53 @@ export async function POST(request) {
 
 export async function PUT(request) {
   try {
-    const body = await request.json();
-    const { mobile, password } = body;
-
-    if (!mobile || !password) {
+    // Authenticate request
+    const user = await authenticateRequest(request);
+    if (!user) {
       return NextResponse.json(
-        { success: false, message: "Mobile and password are required" },
+        { success: false, message: "Unauthorized - Invalid or missing token" },
+        { status: 401 },
+      );
+    }
+
+    // Check authorization - only admin can update teachers
+    if (user.role !== "admin") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Forbidden - Only admins can update teachers",
+        },
+        { status: 403 },
+      );
+    }
+
+    const body = await request.json();
+
+    // Validate request body with Zod
+    const validation = validateTeacherUpdate(body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, message: validation.error },
         { status: 400 },
       );
     }
 
-    // Find and update teacher password by mobile
+    const { teacherId: id, name, mobile, password } = validation.data;
+
+    // Build update data
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (mobile) updateData.mobile = mobile;
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      updateData.passwordHash = hashedPassword;
+      updateData.password = password; // Keep plaintext for migration period
+    }
+
+    // Find and update teacher
     const teacher = await prisma.user.update({
-      where: { mobile },
-      data: { password },
+      where: { id: Number(id) },
+      data: updateData,
       select: {
         id: true,
         name: true,
@@ -84,7 +151,7 @@ export async function PUT(request) {
 
     return NextResponse.json({
       success: true,
-      message: "Password updated successfully",
+      message: "Teacher updated successfully",
       teacher,
     });
   } catch (error) {
@@ -94,6 +161,7 @@ export async function PUT(request) {
         { status: 404 },
       );
     }
+    console.error("PUT /api/teachers error:", error);
     return NextResponse.json(
       { success: false, message: error.message },
       { status: 500 },
@@ -103,12 +171,36 @@ export async function PUT(request) {
 
 export async function DELETE(request) {
   try {
+    // Authenticate request
+    const user = await authenticateRequest(request);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized - Invalid or missing token" },
+        { status: 401 },
+      );
+    }
+
+    // Check authorization - only admin can delete teachers
+    if (user.role !== "admin") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Forbidden - Only admins can delete teachers",
+        },
+        { status: 403 },
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const teacherId = searchParams.get("teacherId");
 
-    if (!teacherId) {
+    // Validate teacherId with Zod
+    const validation = validateTeacherDelete({
+      teacherId: parseInt(teacherId),
+    });
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, message: "teacherId is required" },
+        { success: false, message: validation.error },
         { status: 400 },
       );
     }
@@ -125,6 +217,13 @@ export async function DELETE(request) {
       message: "Teacher deleted successfully",
     });
   } catch (error) {
+    if (error.code === "P2025") {
+      return NextResponse.json(
+        { success: false, message: "Teacher not found" },
+        { status: 404 },
+      );
+    }
+    console.error("DELETE /api/teachers error:", error);
     return NextResponse.json(
       { success: false, message: error.message },
       { status: 500 },
@@ -148,7 +247,6 @@ export async function GET(request) {
               id: true,
               name: true,
               mobile: true,
-              password: true,
             },
           },
           course: {
@@ -167,7 +265,6 @@ export async function GET(request) {
         id: ct.teacher.id,
         name: ct.teacher.name,
         mobile: ct.teacher.mobile,
-        password: ct.teacher.password,
         courseCode: ct.course.courseCode,
         courseName: ct.course.subject,
       }));
@@ -181,12 +278,12 @@ export async function GET(request) {
           id: true,
           name: true,
           mobile: true,
-          password: true,
         },
       });
       return NextResponse.json({ success: true, teachers });
     }
   } catch (error) {
+    console.error("GET /api/teachers error:", error);
     return NextResponse.json(
       { success: false, message: "Failed to fetch teachers" },
       { status: 500 },

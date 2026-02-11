@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { apiCall } from "@/lib/apiUtils";
 import "../attendance.css";
 
 export default function AdminDashboard({ user, onLogout }) {
@@ -15,11 +16,10 @@ export default function AdminDashboard({ user, onLogout }) {
       return;
     }
     try {
-      const res = await fetch("/api/teachers", {
+      const res = await apiCall("/api/teachers", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mobile: changePasswordMobile,
+          teacherId: parseInt(changePasswordMobile),
           password: changePasswordNew,
         }),
       });
@@ -68,13 +68,76 @@ export default function AdminDashboard({ user, onLogout }) {
   const [teacherSearch, setTeacherSearch] = useState("");
   const [selectedTeacherToRemove, setSelectedTeacherToRemove] = useState("");
 
+  // Report state
+  const [reportProgram, setReportProgram] = useState("BE");
+  const [reportDepartments, setReportDepartments] = useState([]);
+  const [reportDate, setReportDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
+  const [reportType, setReportType] = useState("whole"); // 'whole', 'department', 'class'
+  const [reportDepartment, setReportDepartment] = useState(null);
+  const [reportClass, setReportClass] = useState(null);
+  const [reportClasses, setReportClasses] = useState([]);
+  const [report, setReport] = useState({});
+  const [reportTotalStudents, setReportTotalStudents] = useState({}); // Map of deptId to student count
+  const [expandedTeacherId, setExpandedTeacherId] = useState(null); // Track which teacher's courses are expanded
+  const [teacherCourses, setTeacherCourses] = useState({}); // Cache of teacher courses
+
+  // Fetch teacher courses when expanding a teacher
+  const fetchTeacherCourses = async (teacherId) => {
+    if (teacherCourses[teacherId]) {
+      // Already cached, just toggle
+      setExpandedTeacherId(expandedTeacherId === teacherId ? null : teacherId);
+      return;
+    }
+
+    try {
+      const res = await apiCall(`/api/class-teachers?teacherId=${teacherId}`);
+      const data = await res.json();
+      if (data.success) {
+        setTeacherCourses((prev) => ({
+          ...prev,
+          [teacherId]: data.assignments,
+        }));
+        setExpandedTeacherId(
+          expandedTeacherId === teacherId ? null : teacherId,
+        );
+      }
+    } catch (error) {
+      console.error("Failed to fetch teacher courses:", error);
+    }
+  };
+
   // Teacher Management
   const fetchTeachers = async () => {
     try {
-      const res = await fetch("/api/teachers");
+      const res = await apiCall("/api/teachers");
       const data = await res.json();
       if (data.success) {
         setTeachers(data.teachers);
+
+        // Pre-fetch courses for all teachers in parallel
+        const coursePromises = data.teachers.map((teacher) =>
+          apiCall(`/api/class-teachers?teacherId=${teacher.id}`)
+            .then((res) => res.json())
+            .then((courseData) => {
+              if (courseData.success) {
+                setTeacherCourses((prev) => ({
+                  ...prev,
+                  [teacher.id]: courseData.assignments,
+                }));
+              }
+            })
+            .catch((error) =>
+              console.error(
+                `Failed to fetch courses for teacher ${teacher.id}:`,
+                error,
+              ),
+            ),
+        );
+
+        // Wait for all course fetches to complete
+        await Promise.all(coursePromises);
       }
     } catch (error) {
       console.error("Failed to fetch teachers:", error);
@@ -92,9 +155,8 @@ export default function AdminDashboard({ user, onLogout }) {
     }
 
     try {
-      const res = await fetch("/api/teachers", {
+      const res = await apiCall("/api/teachers", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newTeacher),
       });
       const data = await res.json();
@@ -121,7 +183,7 @@ export default function AdminDashboard({ user, onLogout }) {
     }
 
     try {
-      const res = await fetch(`/api/teachers?teacherId=${teacherId}`, {
+      const res = await apiCall(`/api/teachers?teacherId=${teacherId}`, {
         method: "DELETE",
       });
       const data = await res.json();
@@ -148,7 +210,7 @@ export default function AdminDashboard({ user, onLogout }) {
   // Fetch departments for selected program
   useEffect(() => {
     async function fetchDepartments() {
-      const res = await fetch(`/api/departments?program=${selectedProgram}`);
+      const res = await apiCall(`/api/departments?program=${selectedProgram}`);
       const data = await res.json();
       if (data.success) {
         setDepartments(data.departments);
@@ -169,7 +231,7 @@ export default function AdminDashboard({ user, onLogout }) {
         setSelectedClass(null);
         return;
       }
-      const res = await fetch(
+      const res = await apiCall(
         `/api/classes?departmentId=${selectedDepartment.id}`,
       );
       const data = await res.json();
@@ -192,13 +254,13 @@ export default function AdminDashboard({ user, onLogout }) {
     }
     async function fetchClassDetails() {
       // Fetch students
-      const resStudents = await fetch(
+      const resStudents = await apiCall(
         `/api/students?classId=${selectedClass.id}`,
       );
       const dataStudents = await resStudents.json();
       setClassStudents(dataStudents.success ? dataStudents.students : []);
       // Fetch teachers
-      const resTeachers = await fetch(
+      const resTeachers = await apiCall(
         `/api/teachers?classId=${selectedClass.id}`,
       );
       const dataTeachers = await resTeachers.json();
@@ -210,37 +272,174 @@ export default function AdminDashboard({ user, onLogout }) {
   // Fetch teachers
   useEffect(() => {
     async function fetchTeachers() {
-      const res = await fetch("/api/teachers");
+      const res = await apiCall("/api/teachers");
       const data = await res.json();
       if (data.success) setTeachers(data.teachers);
     }
     fetchTeachers();
   }, []);
 
+  // Fetch departments for report based on selected program
+  useEffect(() => {
+    async function fetchReportDepartments() {
+      const res = await apiCall(`/api/departments?program=${reportProgram}`);
+      const data = await res.json();
+      if (data.success) {
+        setReportDepartments(data.departments);
+        setReportDepartment(null);
+        setReportClass(null);
+      } else {
+        setReportDepartments([]);
+        setReportDepartment(null);
+        setReportClass(null);
+      }
+    }
+    fetchReportDepartments();
+  }, [reportProgram]);
+
+  // Fetch classes for report filter based on selected department
+  useEffect(() => {
+    async function fetchClassesForReport() {
+      let allClasses = [];
+      if (reportDepartment) {
+        // If a specific department is selected, fetch only its classes
+        const res = await apiCall(
+          `/api/classes?departmentId=${reportDepartment.id}`,
+        );
+        const data = await res.json();
+        if (data.success) {
+          allClasses = data.classes.map((c) => ({
+            ...c,
+            departmentId: reportDepartment.id,
+          }));
+        }
+      } else {
+        // If no specific department, fetch all classes for all report departments
+        for (const dept of reportDepartments) {
+          const res = await apiCall(`/api/classes?departmentId=${dept.id}`);
+          const data = await res.json();
+          if (data.success) {
+            allClasses = [
+              ...allClasses,
+              ...data.classes.map((c) => ({ ...c, departmentId: dept.id })),
+            ];
+          }
+        }
+      }
+      setReportClasses(allClasses);
+      if (reportDepartment && allClasses.length === 0) {
+        setReportClass(null);
+      }
+    }
+    if (reportDepartments.length > 0 || reportDepartment) {
+      fetchClassesForReport();
+    }
+  }, [reportDepartments, reportDepartment]);
+
+  // Update report preview when filters change
+  useEffect(() => {
+    async function updateReportPreview() {
+      if (activeTab === "report") {
+        const newReport = await generateReport(
+          reportDate,
+          reportType,
+          reportDepartment,
+          reportClass,
+        );
+        setReport(newReport);
+      }
+    }
+    updateReportPreview();
+  }, [
+    activeTab,
+    reportDate,
+    reportType,
+    reportDepartment,
+    reportClass,
+    reportDepartments,
+  ]);
+
+  // Get all students by department
+  const getStudentsByDepartment = (departmentId) => {
+    if (!departmentId) return [];
+
+    // Return an array-like object with length property
+    // The length represents the total count of students in the department
+    const count = reportTotalStudents[departmentId] || 0;
+    return new Array(count).fill({});
+  };
+
   // Generate Attendance Report (async)
-  const generateReport = async () => {
+  const generateReport = async (
+    selectedDate = reportDate,
+    type = reportType,
+    dept = reportDepartment,
+    cls = reportClass,
+  ) => {
     const report = {};
-    for (const dept of departments) {
+    const totalStudentsMap = {};
+    const dateStr = new Date(selectedDate).toISOString().split("T")[0];
+
+    let deptsToProcess = [];
+    if (type === "whole") {
+      deptsToProcess = reportDepartments;
+    } else if (type === "department" && dept) {
+      deptsToProcess = reportDepartments.filter((d) => d.id === dept.id);
+    } else if (type === "class" && cls) {
+      const dept = reportDepartments.find((d) => d.id === cls.departmentId);
+      if (dept) deptsToProcess = [dept];
+    }
+
+    for (const dept of deptsToProcess) {
+      // Initialize total students for this department
+      if (!totalStudentsMap[dept.id]) {
+        totalStudentsMap[dept.id] = new Set();
+      }
+
       // Fetch all classes in this department
-      const resClasses = await fetch(`/api/classes?departmentId=${dept.id}`);
+      const resClasses = await apiCall(`/api/classes?departmentId=${dept.id}`);
       const dataClasses = await resClasses.json();
-      const classes = dataClasses.success ? dataClasses.classes : [];
+      let classes = dataClasses.success ? dataClasses.classes : [];
+
+      // Filter by class if report type is 'class'
+      if (type === "class" && cls) {
+        classes = classes.filter((c) => c.id === cls.id);
+      }
+
       report[dept.name] = {};
       for (const classItem of classes) {
-        // Fetch attendance for this class for today (or a selected date)
-        const today = new Date().toISOString().split("T")[0];
-        const resAttendance = await fetch(
-          `/api/attendance?classId=${classItem.id}&from=${today}&to=${today}`,
+        // Fetch attendance for this class for selected date
+        const resAttendance = await apiCall(
+          `/api/attendance?classId=${classItem.id}&from=${dateStr}&to=${dateStr}`,
+        );
+        // Fetch ALL attendance for this class to calculate total leaves
+        const resAllAttendance = await apiCall(
+          `/api/attendance?classId=${classItem.id}`,
         );
         let dataAttendance = {};
+        let dataAllAttendance = {};
         try {
           dataAttendance = await resAttendance.json();
+          dataAllAttendance = await resAllAttendance.json();
         } catch {
           dataAttendance = { success: false, error: "Invalid JSON response" };
+          dataAllAttendance = {
+            success: false,
+            error: "Invalid JSON response",
+          };
         }
         let absences = [];
         if (dataAttendance.success) {
           const { students, attendanceRecords } = dataAttendance;
+          // Get all attendance records for total leaves calculation
+          const allAttendanceRecords = dataAllAttendance.success
+            ? dataAllAttendance.attendanceRecords || []
+            : [];
+
+          // Add all students from this class to the total count
+          students.forEach((s) => {
+            totalStudentsMap[dept.id].add(s.id);
+          });
           // Map studentId to student info
           const studentMap = {};
           students.forEach((s) => {
@@ -256,7 +455,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 residence: studentMap[rec.studentId]?.residence || "",
                 reason: rec.absenceReason || "",
                 informed: rec.informed || "",
-                leavesTaken: attendanceRecords.filter(
+                leavesTaken: allAttendanceRecords.filter(
                   (r2) =>
                     r2.studentId === rec.studentId && r2.status === "absent",
                 ).length,
@@ -266,21 +465,33 @@ export default function AdminDashboard({ user, onLogout }) {
         report[dept.name][classItem.name] = absences;
       }
     }
+
+    // Convert Sets to counts
+    const totalStudentsCount = {};
+    Object.entries(totalStudentsMap).forEach(([deptId, studentSet]) => {
+      totalStudentsCount[deptId] = studentSet.size;
+    });
+    setReportTotalStudents(totalStudentsCount);
+
     return report;
   };
 
-  // Print Absence Report (async)
+  // Print Absence Report
   const printReport = async () => {
-    // Fetch today's attendance data for print report
-    // Fetch all attendance records for today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     try {
       const report = await generateReport();
+      const dateStr = new Date(reportDate).toLocaleDateString();
+      const reportTypeLabel =
+        reportType === "whole"
+          ? "All Departments"
+          : reportType === "department"
+            ? reportDepartment?.name || "Department"
+            : reportClass?.name || "Class";
+
       let printContent = `
         <html>
           <head>
-            <title>Absence Report - ${new Date().toLocaleDateString()}</title>
+            <title>Absence Report - ${dateStr}</title>
             <style>
               body {
                 font-family: Arial, sans-serif;
@@ -290,13 +501,19 @@ export default function AdminDashboard({ user, onLogout }) {
               h1 {
                 text-align: center;
                 color: #333;
+                margin-bottom: 5px;
+              }
+              .report-info {
+                text-align: center;
+                color: #666;
                 margin-bottom: 10px;
+                font-size: 14px;
               }
               .date {
                 text-align: center;
-                color: #666;
+                color: #999;
                 margin-bottom: 20px;
-                font-size: 14px;
+                font-size: 12px;
               }
               table {
                 width: 100%;
@@ -323,13 +540,27 @@ export default function AdminDashboard({ user, onLogout }) {
                 background-color: #ecf0f1;
               }
               .department-header {
-                background-color: #000000;
-                color: black;
-                font-size: 24px;
-                font-weight: 900;
+                background-color: #2c3e50;
+                color: white;
+                font-size: 18px;
+                font-weight: bold;
                 padding: 15px;
                 margin-top: 20px;
                 margin-bottom: 10px;
+              }
+              .class-header {
+                background-color: #34495e;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                padding: 12px;
+                margin-top: 15px;
+                margin-bottom: 8px;
+              }
+              .no-absences {
+                color: #27ae60;
+                padding: 10px;
+                font-style: italic;
               }
               @media print {
                 body { margin: 10px; }
@@ -339,12 +570,14 @@ export default function AdminDashboard({ user, onLogout }) {
           </head>
           <body>
             <h1>Absence Report</h1>
-            <div class="date">Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
+            <div class="report-info">Report Type: ${reportTypeLabel}</div>
+            <div class="date">Date: ${dateStr} | Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
       `;
+
       Object.entries(report).forEach(([deptName, absencesByClass]) => {
         printContent += `<div class="department-header">${deptName}</div>`;
         Object.entries(absencesByClass).forEach(([className, absences]) => {
-          printContent += `<div style="font-size:20px;font-weight:bold;margin:10px 0;">Class: ${className}</div>`;
+          printContent += `<div class="class-header">Class: ${className}</div>`;
           if (absences.length > 0) {
             printContent += `
               <table>
@@ -362,7 +595,6 @@ export default function AdminDashboard({ user, onLogout }) {
                 <tbody>
             `;
             absences.forEach((student, idx) => {
-              // Status: Informed or Not Informed
               let status = "Not Informed";
               if (typeof student.informed === "string") {
                 status =
@@ -389,16 +621,16 @@ export default function AdminDashboard({ user, onLogout }) {
               </table>
             `;
           } else {
-            printContent += `<p style="color: #27ae60; padding: 10px;">No absences</p>`;
+            printContent += `<div class="no-absences">No absences</div>`;
           }
         });
       });
+
       printContent += `
           </body>
         </html>
       `;
-      // Clean up any references after printing
-      setTimeout(() => {}, 0);
+
       const printWindow = window.open("", "", "width=900,height=600");
       if (!printWindow) {
         alert(
@@ -420,85 +652,7 @@ export default function AdminDashboard({ user, onLogout }) {
         "Failed to generate report. Please check attendance data and try again.",
       );
     }
-    let printContent = `
-      <html>
-        <head>
-          <title>Absence Report - ${new Date().toLocaleDateString()}</title>
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              margin: 20px;
-              line-height: 1.6;
-            }
-            h1 {
-              text-align: center;
-              color: #333;
-              margin-bottom: 10px;
-            }
-            .date {
-              text-align: center;
-              color: #666;
-              margin-bottom: 20px;
-              font-size: 14px;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 30px;
-            }
-            th {
-              background-color: #34495e;
-              color: white;
-              padding: 12px;
-              text-align: left;
-              border: 1px solid #333;
-              font-weight: bold;
-            }
-            td {
-              padding: 10px 12px;
-              border: 1px solid #bbb;
-              text-align: left;
-            }
-            tr:nth-child(even) {
-              background-color: #f9f9f9;
-            }
-            tr:hover {
-              background-color: #ecf0f1;
-            }
-            .department-header {
-              background-color: #000000;
-              color: black;
-              font-size: 24px;
-              font-weight: 900;
-              padding: 15px;
-              margin-top: 20px;
-              margin-bottom: 10px;
-            }
-            @media print {
-              body { margin: 10px; }
-              table { page-break-inside: avoid; }
-            }
-          </style>
-        </head>
-        <body>
-          <h1>Absence Report</h1>
-          <div class="date">Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
-    `;
-
-    // ...existing code...
-
-    printContent += `
-        </body>
-      </html>
-    `;
-
-    const printWindow = window.open("", "", "width=900,height=600");
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.print();
   };
-
-  const report = generateReport();
 
   return (
     <div className="attendance-container">
@@ -709,7 +863,7 @@ export default function AdminDashboard({ user, onLogout }) {
                     <div>S.No</div>
                     <div>Teacher Name</div>
                     <div>Mobile</div>
-                    <div>Password</div>
+                    <div>Courses Taught</div>
                   </div>
                   {teachers
                     .filter((teacher) => {
@@ -720,11 +874,79 @@ export default function AdminDashboard({ user, onLogout }) {
                       );
                     })
                     .map((teacher, idx) => (
-                      <div key={teacher.id} className="list-item">
-                        <div>{idx + 1}</div>
-                        <div>{teacher.name}</div>
-                        <div>{teacher.mobile}</div>
-                        <div>{teacher.password}</div>
+                      <div key={teacher.id}>
+                        <div className="list-item">
+                          <div>{idx + 1}</div>
+                          <div>{teacher.name}</div>
+                          <div>{teacher.mobile}</div>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "10px",
+                              alignItems: "center",
+                            }}
+                          >
+                            <span>
+                              {teacherCourses[teacher.id]?.length || 0} course
+                              {(teacherCourses[teacher.id]?.length || 0) !== 1
+                                ? "s"
+                                : ""}
+                            </span>
+                            <button
+                              onClick={() => fetchTeacherCourses(teacher.id)}
+                              style={{
+                                padding: "5px 10px",
+                                backgroundColor: "#e0e0e0",
+                                color: "#333",
+                                border: "none",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                                fontSize: "16px",
+                                fontWeight: "bold",
+                              }}
+                            >
+                              {expandedTeacherId === teacher.id ? "v" : "^"}
+                            </button>
+                          </div>
+                        </div>
+                        {/* Expanded courses list */}
+                        {expandedTeacherId === teacher.id &&
+                          teacherCourses[teacher.id] && (
+                            <div
+                              style={{
+                                padding: "10px 20px",
+                                backgroundColor: "#f5f5f5",
+                                borderLeft: "4px solid #4CAF50",
+                              }}
+                            >
+                              <strong>Courses Taught:</strong>
+                              {teacherCourses[teacher.id].length === 0 ? (
+                                <p style={{ marginTop: "5px", color: "#999" }}>
+                                  No courses assigned
+                                </p>
+                              ) : (
+                                <ul
+                                  style={{
+                                    marginTop: "8px",
+                                    paddingLeft: "20px",
+                                  }}
+                                >
+                                  {teacherCourses[teacher.id].map(
+                                    (assignment) => (
+                                      <li key={assignment.id}>
+                                        <strong>
+                                          {assignment.course.subject}
+                                        </strong>{" "}
+                                        ({assignment.course.courseCode}) -
+                                        Class:{" "}
+                                        <strong>{assignment.class.name}</strong>
+                                      </li>
+                                    ),
+                                  )}
+                                </ul>
+                              )}
+                            </div>
+                          )}
                       </div>
                     ))}
                 </div>
@@ -915,39 +1137,230 @@ export default function AdminDashboard({ user, onLogout }) {
         {activeTab === "report" && (
           <div className="admin-section">
             <h2>Absence Report</h2>
-            <button onClick={printReport} className="export-btn">
-              Print Report
-            </button>
 
+            {/* Program Selector */}
+            <div style={{ marginBottom: "15px" }}>
+              <label
+                style={{
+                  fontWeight: "bold",
+                  display: "block",
+                  marginBottom: "5px",
+                }}
+              >
+                Select Program:
+              </label>
+              <select
+                value={reportProgram}
+                onChange={(e) => setReportProgram(e.target.value)}
+                style={{
+                  padding: "8px",
+                  borderRadius: "4px",
+                  border: "1px solid #ddd",
+                  width: "200px",
+                }}
+              >
+                {programs.map((prog) => (
+                  <option key={prog.id} value={prog.name}>
+                    {prog.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Report Filters */}
+            <div className="filter-section" style={{ marginBottom: "20px" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gap: "15px",
+                  marginBottom: "15px",
+                }}
+              >
+                {/* Date Picker */}
+                <div>
+                  <label
+                    style={{
+                      fontWeight: "bold",
+                      display: "block",
+                      marginBottom: "5px",
+                    }}
+                  >
+                    Select Date:
+                  </label>
+                  <input
+                    type="date"
+                    value={reportDate}
+                    onChange={(e) => setReportDate(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                    }}
+                  />
+                </div>
+
+                {/* Report Type */}
+                <div>
+                  <label
+                    style={{
+                      fontWeight: "bold",
+                      display: "block",
+                      marginBottom: "5px",
+                    }}
+                  >
+                    Report Type:
+                  </label>
+                  <select
+                    value={reportType}
+                    onChange={(e) => {
+                      setReportType(e.target.value);
+                      setReportDepartment(null);
+                      setReportClass(null);
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                    }}
+                  >
+                    <option value="whole">Whole Institution</option>
+                    <option value="department">By Department</option>
+                    <option value="class">By Class</option>
+                  </select>
+                </div>
+
+                {/* Department Filter - shows for department and class types */}
+                {(reportType === "department" || reportType === "class") && (
+                  <div>
+                    <label
+                      style={{
+                        fontWeight: "bold",
+                        display: "block",
+                        marginBottom: "5px",
+                      }}
+                    >
+                      {reportType === "class"
+                        ? "Select Department:"
+                        : "Select Department:"}
+                    </label>
+                    <select
+                      value={reportDepartment?.id || ""}
+                      onChange={(e) => {
+                        const dept = reportDepartments.find(
+                          (d) => d.id === parseInt(e.target.value),
+                        );
+                        setReportDepartment(dept || null);
+                        if (reportType === "class") {
+                          setReportClass(null);
+                        }
+                      }}
+                      style={{
+                        width: "100%",
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid #ddd",
+                      }}
+                    >
+                      <option value="">-- Select Department --</option>
+                      {reportDepartments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Class Filter - only shows when department is selected and type is class */}
+                {reportType === "class" && reportDepartment && (
+                  <div>
+                    <label
+                      style={{
+                        fontWeight: "bold",
+                        display: "block",
+                        marginBottom: "5px",
+                      }}
+                    >
+                      Select Class:
+                    </label>
+                    <select
+                      value={reportClass?.id || ""}
+                      onChange={(e) => {
+                        const cls = reportClasses.find(
+                          (c) => c.id === parseInt(e.target.value),
+                        );
+                        setReportClass(cls || null);
+                      }}
+                      style={{
+                        width: "100%",
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid #ddd",
+                      }}
+                    >
+                      <option value="">-- Select Class --</option>
+                      {reportClasses.map((cls) => (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Print Button */}
+              <button
+                onClick={printReport}
+                className="export-btn"
+                style={{ marginTop: "10px" }}
+              >
+                Print Report
+              </button>
+            </div>
+
+            {/* Report Preview */}
             <div className="report-container">
-              {Object.entries(report).map(([deptName, absences]) => (
-                <div key={deptName} className="report-section">
-                  <div className="report-department-title">{deptName}</div>
-                  <div className="report-class">
-                    <div className="report-class-title">
-                      Total Students:{" "}
-                      {getStudentsByDepartment(
-                        departments.find((d) => d.name === deptName)?.id,
-                      )?.length || 0}
-                      , Absent: {absences.length}
-                    </div>
-                    {absences.length > 0 ? (
-                      absences.map((student, idx) => (
-                        <div key={idx} className="report-student">
-                          {student.rollNo} - {student.name} ({student.reason})
+              <h3>Report Preview</h3>
+              {Object.keys(report).length === 0 ? (
+                <div style={{ color: "#999", padding: "20px" }}>
+                  No data available for the selected filters.
+                </div>
+              ) : (
+                Object.entries(report).map(([deptName, classesByName]) => (
+                  <div key={deptName} className="report-section">
+                    <div className="report-department-title">{deptName}</div>
+                    {Object.entries(classesByName).map(
+                      ([className, absences]) => (
+                        <div key={className} className="report-class">
+                          <div className="report-class-title">
+                            Class: {className} | Total Absences:{" "}
+                            {absences.length}
+                          </div>
+                          {absences.length > 0 ? (
+                            absences.map((student, idx) => (
+                              <div key={idx} className="report-student">
+                                {student.rollNo} - {student.name} (
+                                {student.reason})
+                              </div>
+                            ))
+                          ) : (
+                            <div
+                              className="report-student"
+                              style={{ color: "#27ae60" }}
+                            >
+                              No absences
+                            </div>
+                          )}
                         </div>
-                      ))
-                    ) : (
-                      <div
-                        className="report-student"
-                        style={{ color: "#27ae60" }}
-                      >
-                        No absences
-                      </div>
+                      ),
                     )}
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         )}

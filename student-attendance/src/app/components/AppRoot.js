@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import LoginPage from "./LoginPage";
 import TeacherDashboard from "./TeacherDashboard";
 import AdminDashboard from "./AdminDashboard";
+import { clearToken } from "@/lib/apiUtils";
 
 export default function AppRoot() {
   const [isMounted, setIsMounted] = useState(false);
@@ -33,6 +34,7 @@ export default function AppRoot() {
     setIsLoggedIn(false);
     setUser(null);
     localStorage.removeItem("user");
+    clearToken();
   };
 
   if (!isMounted) {

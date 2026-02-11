@@ -31,24 +31,31 @@ model Class {
   attendance   Attendance[]
   students     Student[]
   classTeachers ClassTeacher[]
+  courses      Course[]
 
   @@unique([name, departmentId])
 }
 
-// Course model to store course details with unique code
+// Course model to store course details per class
 model Course {
   id         Int    @id @default(autoincrement())
-  courseCode String @unique
+  courseCode String
   subject    String
+  classId    Int
+  
+  class      Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
   classTeachers ClassTeacher[]
+  
+  @@unique([classId, courseCode])
 }
 
 model User {
-  id        Int     @id @default(autoincrement())
-  name      String
-  mobile    String  @unique
-  password  String
-  role      String  // 'admin', 'teacher', 'student'
+  id           Int     @id @default(autoincrement())
+  name         String
+  mobile       String  @unique
+  password     String? // Deprecated - use passwordHash instead
+  passwordHash String? // Bcrypt hashed password
+  role         String  // 'admin', 'teacher', 'student'
   classTeachers ClassTeacher[]
 }
 // Join table for teachers assigned to classes with subjects

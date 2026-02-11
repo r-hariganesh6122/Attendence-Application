@@ -13,20 +13,26 @@ async function assignDefaultTeacherToAllClasses() {
     return;
   }
 
-  // Create or find the "General" course
-  const course = await prisma.course.upsert({
-    where: { courseCode: "GEN001" },
-    update: {},
-    create: {
-      courseCode: "GEN001",
-      subject: "General",
-    },
-  });
-
   const classes = await prisma.class.findMany();
   let count = 0;
   for (const cls of classes) {
     try {
+      // Create or find the "General" course for this specific class
+      const course = await prisma.course.upsert({
+        where: {
+          classId_courseCode: {
+            classId: cls.id,
+            courseCode: "GEN001",
+          },
+        },
+        update: {},
+        create: {
+          courseCode: "GEN001",
+          subject: "General",
+          classId: cls.id,
+        },
+      });
+
       await prisma.classTeacher.upsert({
         where: {
           classId_teacherId_courseId: {

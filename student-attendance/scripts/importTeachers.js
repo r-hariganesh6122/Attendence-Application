@@ -78,15 +78,21 @@ async function importTeachers() {
           continue;
         }
 
-        // Create or find the Course
+        // Create or find the Course for this specific class
         const course = await prisma.course.upsert({
-          where: { courseCode },
+          where: {
+            classId_courseCode: {
+              classId: classRecord.id,
+              courseCode: courseCode,
+            },
+          },
           update: {
             subject: courseName,
           },
           create: {
             courseCode,
             subject: courseName,
+            classId: classRecord.id,
           },
         });
 
