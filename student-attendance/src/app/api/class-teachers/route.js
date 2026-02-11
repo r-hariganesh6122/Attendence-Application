@@ -32,7 +32,8 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          message: "This teacher is already assigned to this course in this class",
+          message:
+            "This teacher is already assigned to this course in this class",
         },
         { status: 400 },
       );
