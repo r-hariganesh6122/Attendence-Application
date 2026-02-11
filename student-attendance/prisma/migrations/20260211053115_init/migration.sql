@@ -83,6 +83,7 @@ CREATE TABLE `Student` (
     `residence` ENUM('H', 'D', 'OSS') NOT NULL,
     `classId` INTEGER NOT NULL,
 
+    UNIQUE INDEX `Student_regNo_key`(`regNo`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 

@@ -49,6 +49,9 @@ export default function AdminDashboard({ user, onLogout }) {
   const [classTab, setClassTab] = useState("students");
   const [classStudents, setClassStudents] = useState([]);
   const [classTeachers, setClassTeachers] = useState([]);
+
+  // State for teacher subtabs
+  const [teacherTab, setTeacherTab] = useState("list");
   const [programs] = useState([
     { id: 1, name: "BE" },
     { id: 2, name: "BTech" },
@@ -598,221 +601,313 @@ export default function AdminDashboard({ user, onLogout }) {
           <div className="admin-section">
             <h2>Teachers</h2>
 
-            {/* Search Teachers */}
-            <div className="search-section" style={{ marginBottom: "20px" }}>
-              <input
-                type="text"
-                value={teacherSearch}
-                onChange={(e) => setTeacherSearch(e.target.value)}
-                placeholder="Search teachers by name or mobile..."
-                className="search-input"
+            {/* Teacher Sub-tabs Navigation */}
+            <div
+              style={{
+                display: "flex",
+                gap: "10px",
+                marginBottom: "20px",
+                borderBottom: "2px solid #ddd",
+                paddingBottom: "10px",
+              }}
+            >
+              <button
+                onClick={() => setTeacherTab("list")}
                 style={{
-                  width: "100%",
-                  padding: "10px",
+                  padding: "10px 20px",
+                  backgroundColor:
+                    teacherTab === "list" ? "#007bff" : "#f0f0f0",
+                  color: teacherTab === "list" ? "white" : "#333",
+                  border: "none",
                   borderRadius: "4px",
-                  border: "1px solid #ddd",
-                  fontSize: "14px",
+                  cursor: "pointer",
+                  fontWeight: teacherTab === "list" ? "bold" : "normal",
+                  transition: "all 0.3s",
                 }}
-              />
-            </div>
-
-            {/* Teacher List */}
-            <div className="data-list">
-              <div className="list-header">
-                <div>S.No</div>
-                <div>Teacher Name</div>
-                <div>Mobile</div>
-                <div>Password</div>
-              </div>
-              {teachers
-                .filter((teacher) => {
-                  const search = teacherSearch.toLowerCase();
-                  return (
-                    teacher.name.toLowerCase().includes(search) ||
-                    teacher.mobile.toLowerCase().includes(search)
-                  );
-                })
-                .map((teacher, idx) => (
-                  <div key={teacher.id} className="list-item">
-                    <div>{idx + 1}</div>
-                    <div>{teacher.name}</div>
-                    <div>{teacher.mobile}</div>
-                    <div>{teacher.password}</div>
-                  </div>
-                ))}
-            </div>
-
-            {/* Change Password Section - now below teachers list */}
-            <div className="form-section" style={{ marginTop: "30px" }}>
-              <h3>Change Password</h3>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>Mobile Number</label>
-                  <input
-                    type="tel"
-                    value={changePasswordMobile || ""}
-                    onChange={(e) => setChangePasswordMobile(e.target.value)}
-                    placeholder="Enter teacher mobile number"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>New Password</label>
-                  <input
-                    type="password"
-                    value={changePasswordNew || ""}
-                    onChange={(e) => setChangePasswordNew(e.target.value)}
-                    placeholder="Enter new password"
-                  />
-                </div>
-              </div>
-              <button onClick={handleChangePassword} className="add-btn">
+              >
+                List
+              </button>
+              <button
+                onClick={() => setTeacherTab("addTeacher")}
+                style={{
+                  padding: "10px 20px",
+                  backgroundColor:
+                    teacherTab === "addTeacher" ? "#007bff" : "#f0f0f0",
+                  color: teacherTab === "addTeacher" ? "white" : "#333",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontWeight: teacherTab === "addTeacher" ? "bold" : "normal",
+                  transition: "all 0.3s",
+                }}
+              >
+                Add Teacher
+              </button>
+              <button
+                onClick={() => setTeacherTab("removeTeacher")}
+                style={{
+                  padding: "10px 20px",
+                  backgroundColor:
+                    teacherTab === "removeTeacher" ? "#007bff" : "#f0f0f0",
+                  color: teacherTab === "removeTeacher" ? "white" : "#333",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontWeight:
+                    teacherTab === "removeTeacher" ? "bold" : "normal",
+                  transition: "all 0.3s",
+                }}
+              >
+                Remove Teacher
+              </button>
+              <button
+                onClick={() => setTeacherTab("changePassword")}
+                style={{
+                  padding: "10px 20px",
+                  backgroundColor:
+                    teacherTab === "changePassword" ? "#007bff" : "#f0f0f0",
+                  color: teacherTab === "changePassword" ? "white" : "#333",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontWeight:
+                    teacherTab === "changePassword" ? "bold" : "normal",
+                  transition: "all 0.3s",
+                }}
+              >
                 Change Password
               </button>
             </div>
 
-            {/* Add New Teacher - At the bottom */}
-            <div className="form-section" style={{ marginTop: "30px" }}>
-              <h3>Add New Teacher</h3>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>Teacher Name</label>
+            {/* List Tab */}
+            {teacherTab === "list" && (
+              <div>
+                {/* Search Teachers */}
+                <div
+                  className="search-section"
+                  style={{ marginBottom: "20px" }}
+                >
                   <input
                     type="text"
-                    value={newTeacher.name}
-                    onChange={(e) =>
-                      setNewTeacher({
-                        ...newTeacher,
-                        name: e.target.value,
-                      })
-                    }
-                    placeholder="Enter teacher name"
+                    value={teacherSearch}
+                    onChange={(e) => setTeacherSearch(e.target.value)}
+                    placeholder="Search teachers by name or mobile..."
+                    className="search-input"
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                      fontSize: "14px",
+                    }}
                   />
                 </div>
-                <div className="form-group">
-                  <label>Mobile Number</label>
-                  <input
-                    type="tel"
-                    value={newTeacher.mobile}
-                    onChange={(e) =>
-                      setNewTeacher({
-                        ...newTeacher,
-                        mobile: e.target.value,
-                      })
-                    }
-                    placeholder="Enter mobile number"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Password</label>
-                  <input
-                    type="password"
-                    value={newTeacher.password}
-                    onChange={(e) =>
-                      setNewTeacher({
-                        ...newTeacher,
-                        password: e.target.value,
-                      })
-                    }
-                    placeholder="Enter password"
-                  />
+
+                {/* Teacher List */}
+                <div className="data-list">
+                  <div className="list-header">
+                    <div>S.No</div>
+                    <div>Teacher Name</div>
+                    <div>Mobile</div>
+                    <div>Password</div>
+                  </div>
+                  {teachers
+                    .filter((teacher) => {
+                      const search = teacherSearch.toLowerCase();
+                      return (
+                        teacher.name.toLowerCase().includes(search) ||
+                        teacher.mobile.toLowerCase().includes(search)
+                      );
+                    })
+                    .map((teacher, idx) => (
+                      <div key={teacher.id} className="list-item">
+                        <div>{idx + 1}</div>
+                        <div>{teacher.name}</div>
+                        <div>{teacher.mobile}</div>
+                        <div>{teacher.password}</div>
+                      </div>
+                    ))}
                 </div>
               </div>
-              <button onClick={addTeacher} className="add-btn">
-                Add Teacher
-              </button>
-            </div>
+            )}
 
-            {/* Remove Teacher Section */}
-            <div className="form-section" style={{ marginTop: "30px" }}>
-              <h3>Remove Teacher</h3>
-              <div className="form-group">
-                <label>Teacher Name to Remove</label>
-                <input
-                  type="text"
-                  value={selectedTeacherToRemove}
-                  onChange={(e) => setSelectedTeacherToRemove(e.target.value)}
-                  placeholder="Enter teacher name to remove"
-                />
-                {/* Matching teachers list */}
-                {selectedTeacherToRemove.trim() && (
-                  <div
-                    style={{
-                      marginTop: "10px",
-                      border: "1px solid #ddd",
-                      borderRadius: "4px",
-                      maxHeight: "200px",
-                      overflowY: "auto",
-                    }}
-                  >
-                    {teachers
-                      .filter((teacher) =>
+            {/* Change Password Tab */}
+            {teacherTab === "changePassword" && (
+              <div className="form-section">
+                <h3>Change Password</h3>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>Mobile Number</label>
+                    <input
+                      type="tel"
+                      value={changePasswordMobile || ""}
+                      onChange={(e) => setChangePasswordMobile(e.target.value)}
+                      placeholder="Enter teacher mobile number"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>New Password</label>
+                    <input
+                      type="password"
+                      value={changePasswordNew || ""}
+                      onChange={(e) => setChangePasswordNew(e.target.value)}
+                      placeholder="Enter new password"
+                    />
+                  </div>
+                </div>
+                <button onClick={handleChangePassword} className="add-btn">
+                  Change Password
+                </button>
+              </div>
+            )}
+
+            {/* Add Teacher Tab */}
+            {teacherTab === "addTeacher" && (
+              <div className="form-section">
+                <h3>Add New Teacher</h3>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>Teacher Name</label>
+                    <input
+                      type="text"
+                      value={newTeacher.name}
+                      onChange={(e) =>
+                        setNewTeacher({
+                          ...newTeacher,
+                          name: e.target.value,
+                        })
+                      }
+                      placeholder="Enter teacher name"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Mobile Number</label>
+                    <input
+                      type="tel"
+                      value={newTeacher.mobile}
+                      onChange={(e) =>
+                        setNewTeacher({
+                          ...newTeacher,
+                          mobile: e.target.value,
+                        })
+                      }
+                      placeholder="Enter mobile number"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Password</label>
+                    <input
+                      type="password"
+                      value={newTeacher.password}
+                      onChange={(e) =>
+                        setNewTeacher({
+                          ...newTeacher,
+                          password: e.target.value,
+                        })
+                      }
+                      placeholder="Enter password"
+                    />
+                  </div>
+                </div>
+                <button onClick={addTeacher} className="add-btn">
+                  Add Teacher
+                </button>
+              </div>
+            )}
+
+            {/* Remove Teacher Tab */}
+            {teacherTab === "removeTeacher" && (
+              <div className="form-section">
+                <h3>Remove Teacher</h3>
+                <div className="form-group">
+                  <label>Teacher Name to Remove</label>
+                  <input
+                    type="text"
+                    value={selectedTeacherToRemove}
+                    onChange={(e) => setSelectedTeacherToRemove(e.target.value)}
+                    placeholder="Enter teacher name to remove"
+                  />
+                  {/* Matching teachers list */}
+                  {selectedTeacherToRemove.trim() && (
+                    <div
+                      style={{
+                        marginTop: "10px",
+                        border: "1px solid #ddd",
+                        borderRadius: "4px",
+                        maxHeight: "200px",
+                        overflowY: "auto",
+                      }}
+                    >
+                      {teachers
+                        .filter((teacher) =>
+                          teacher.name
+                            .toLowerCase()
+                            .includes(selectedTeacherToRemove.toLowerCase()),
+                        )
+                        .map((teacher) => (
+                          <div
+                            key={teacher.id}
+                            onClick={() =>
+                              setSelectedTeacherToRemove(teacher.name)
+                            }
+                            style={{
+                              padding: "10px",
+                              cursor: "pointer",
+                              borderBottom: "1px solid #eee",
+                              backgroundColor:
+                                selectedTeacherToRemove.toLowerCase() ===
+                                teacher.name.toLowerCase()
+                                  ? "#e3f2fd"
+                                  : "#fff",
+                              transition: "background-color 0.2s",
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.target.style.backgroundColor = "#f5f5f5")
+                            }
+                            onMouseLeave={(e) =>
+                              (e.target.style.backgroundColor =
+                                selectedTeacherToRemove.toLowerCase() ===
+                                teacher.name.toLowerCase()
+                                  ? "#e3f2fd"
+                                  : "#fff")
+                            }
+                          >
+                            {teacher.name} ({teacher.mobile})
+                          </div>
+                        ))}
+                      {teachers.filter((teacher) =>
                         teacher.name
                           .toLowerCase()
                           .includes(selectedTeacherToRemove.toLowerCase()),
-                      )
-                      .map((teacher) => (
-                        <div
-                          key={teacher.id}
-                          onClick={() =>
-                            setSelectedTeacherToRemove(teacher.name)
-                          }
-                          style={{
-                            padding: "10px",
-                            cursor: "pointer",
-                            borderBottom: "1px solid #eee",
-                            backgroundColor:
-                              selectedTeacherToRemove.toLowerCase() ===
-                              teacher.name.toLowerCase()
-                                ? "#e3f2fd"
-                                : "#fff",
-                            transition: "background-color 0.2s",
-                          }}
-                          onMouseEnter={(e) =>
-                            (e.target.style.backgroundColor = "#f5f5f5")
-                          }
-                          onMouseLeave={(e) =>
-                            (e.target.style.backgroundColor =
-                              selectedTeacherToRemove.toLowerCase() ===
-                              teacher.name.toLowerCase()
-                                ? "#e3f2fd"
-                                : "#fff")
-                          }
-                        >
-                          {teacher.name} ({teacher.mobile})
+                      ).length === 0 && (
+                        <div style={{ padding: "10px", color: "#999" }}>
+                          No teachers found
                         </div>
-                      ))}
-                    {teachers.filter((teacher) =>
-                      teacher.name
-                        .toLowerCase()
-                        .includes(selectedTeacherToRemove.toLowerCase()),
-                    ).length === 0 && (
-                      <div style={{ padding: "10px", color: "#999" }}>
-                        No teachers found
-                      </div>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    const teacherToDelete = teachers.find(
+                      (t) =>
+                        t.name.toLowerCase() ===
+                        selectedTeacherToRemove.toLowerCase(),
+                    );
+                    if (teacherToDelete) {
+                      deleteTeacher(teacherToDelete.id);
+                      setSelectedTeacherToRemove("");
+                    } else if (selectedTeacherToRemove.trim()) {
+                      alert("Teacher not found");
+                    }
+                  }}
+                  className="add-btn"
+                  disabled={!selectedTeacherToRemove.trim()}
+                >
+                  Remove Teacher
+                </button>
               </div>
-              <button
-                onClick={() => {
-                  const teacherToDelete = teachers.find(
-                    (t) =>
-                      t.name.toLowerCase() ===
-                      selectedTeacherToRemove.toLowerCase(),
-                  );
-                  if (teacherToDelete) {
-                    deleteTeacher(teacherToDelete.id);
-                    setSelectedTeacherToRemove("");
-                  } else if (selectedTeacherToRemove.trim()) {
-                    alert("Teacher not found");
-                  }
-                }}
-                className="add-btn"
-                disabled={!selectedTeacherToRemove.trim()}
-              >
-                Remove Teacher
-              </button>
-            </div>
+            )}
           </div>
         )}
 

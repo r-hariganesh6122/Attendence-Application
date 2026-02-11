@@ -59,6 +59,48 @@ export async function POST(request) {
   }
 }
 
+export async function PUT(request) {
+  try {
+    const body = await request.json();
+    const { mobile, password } = body;
+
+    if (!mobile || !password) {
+      return NextResponse.json(
+        { success: false, message: "Mobile and password are required" },
+        { status: 400 },
+      );
+    }
+
+    // Find and update teacher password by mobile
+    const teacher = await prisma.user.update({
+      where: { mobile },
+      data: { password },
+      select: {
+        id: true,
+        name: true,
+        mobile: true,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Password updated successfully",
+      teacher,
+    });
+  } catch (error) {
+    if (error.code === "P2025") {
+      return NextResponse.json(
+        { success: false, message: "Teacher not found" },
+        { status: 404 },
+      );
+    }
+    return NextResponse.json(
+      { success: false, message: error.message },
+      { status: 500 },
+    );
+  }
+}
+
 export async function DELETE(request) {
   try {
     const { searchParams } = new URL(request.url);

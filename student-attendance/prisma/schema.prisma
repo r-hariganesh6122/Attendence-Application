@@ -89,7 +89,7 @@ enum ResidenceType {
 model Student {
   id           Int           @id @default(autoincrement())
   rollNo       String
-  regNo        String
+  regNo        String        @unique
   studentName  String
   residence    ResidenceType
   classId      Int
