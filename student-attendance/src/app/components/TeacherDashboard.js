@@ -30,14 +30,24 @@ function TeacherDashboard({ user, onLogout }) {
       });
   }, [user]);
 
-  // Fetch students for selected department/class
+  // Set current department when selectedDepartmentId changes
+  useEffect(() => {
+    if (!selectedDepartmentId || departments.length === 0) {
+      setCurrentDepartment(null);
+      return;
+    }
+    const dept = departments.find((d) => d.id == selectedDepartmentId); // Use == for loose comparison
+    setCurrentDepartment(dept || null);
+  }, [selectedDepartmentId, departments]);
+
+  // Fetch students and attendance for selected department/date
   useEffect(() => {
     if (!selectedDepartmentId) {
       setStudents([]);
       setAttendance({});
-      setCurrentDepartment(null);
       return;
     }
+
     async function fetchData() {
       // Fetch students
       const resStudents = await apiCall(
@@ -69,16 +79,12 @@ function TeacherDashboard({ user, onLogout }) {
         };
       });
       setAttendance(initial);
-
-      // Set current department/class info
-      const dept = departments.find((d) => d.id === selectedDepartmentId);
-      setCurrentDepartment(dept || null);
     }
     fetchData();
-  }, [selectedDepartmentId, departments, selectedDate]);
+  }, [selectedDepartmentId, selectedDate]);
 
   const handleDepartmentChange = (departmentId) => {
-    setSelectedDepartmentId(departmentId);
+    setSelectedDepartmentId(parseInt(departmentId) || departmentId);
   };
 
   const handleDateChange = (date) => {
@@ -178,15 +184,8 @@ function TeacherDashboard({ user, onLogout }) {
         </div>
 
         <div className="class-selector-section">
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
+          <div className="department-date-selector">
+            <div className="selector-group">
               <label htmlFor="department-select" className="class-label">
                 Select Department:
               </label>
@@ -195,14 +194,6 @@ function TeacherDashboard({ user, onLogout }) {
                 value={selectedDepartmentId}
                 onChange={(e) => handleDepartmentChange(e.target.value)}
                 className="class-select"
-                style={{
-                  padding: "10px 15px",
-                  border: "2px solid #ddd",
-                  borderRadius: "6px",
-                  fontSize: "14px",
-                  backgroundColor: "white",
-                  cursor: "pointer",
-                }}
               >
                 {departments.map((dept) => (
                   <option key={dept.id} value={dept.id}>
@@ -211,7 +202,7 @@ function TeacherDashboard({ user, onLogout }) {
                 ))}
               </select>
             </div>
-            <div>
+            <div className="selector-group">
               <label htmlFor="date-select" className="class-label">
                 Select Date:
               </label>
@@ -244,8 +235,8 @@ function TeacherDashboard({ user, onLogout }) {
         <table className="attendance-table">
           <thead>
             <tr>
-              <th>Reg No.</th>
-              <th>Name</th>
+              <th>Roll No</th>
+              <th className="name-column">Name</th>
               <th>Absent</th>
               <th>Informed</th>
               <th>Reason for Absence</th>
@@ -254,8 +245,13 @@ function TeacherDashboard({ user, onLogout }) {
           <tbody>
             {students.map((student) => (
               <tr key={student.id}>
-                <td>{student.regNo}</td>
-                <td>{student.studentName || student.name}</td>
+                <td>
+                  <span className="desktop-content">{student.regNo}</span>
+                  <span className="mobile-content">{student.regNo % 1000}</span>
+                </td>
+                <td className="name-column">
+                  {student.studentName || student.name}
+                </td>
                 <td className="checkbox-cell">
                   <input
                     type="checkbox"

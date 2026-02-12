@@ -1,6 +1,6 @@
 .attendance-container {
   min-height: 100vh;
-  padding: 20px;
+  padding: 1rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -11,29 +11,29 @@
   background: white;
   border-radius: 10px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  padding: 40px;
+  padding: 1rem;
   width: 100%;
   max-width: 1200px;
 }
 
 .attendance-header {
   display: flex;
-  justify-content: space-between;
+  flex-direction: row;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
   align-items: flex-start;
-  margin-bottom: 30px;
-  flex-wrap: wrap;
-  gap: 20px;
+  justify-content: space-between;
 }
 
 .attendance-header > div:first-child h1 {
   margin: 0 0 5px 0;
   color: #333;
-  font-size: 28px;
+  font-size: 1.5rem;
 }
 
 .teacher-name {
   color: #666;
-  font-size: 14px;
+  font-size: 0.875rem;
   margin: 0;
 }
 
@@ -41,23 +41,23 @@
   text-align: center;
   color: #333;
   margin: 0;
-  flex: 1;
-  min-width: 200px;
-  font-size: 28px;
+  font-size: 1.5rem;
 }
 
 .logout-btn {
-  padding: 10px 20px;
+  padding: 0.625rem 1rem;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: bold;
   cursor: pointer;
   transition:
     transform 0.2s,
     box-shadow 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .logout-btn:hover {
@@ -70,27 +70,29 @@
 }
 
 .class-selector-section {
-  margin-bottom: 20px;
+  margin-bottom: 1rem;
   display: flex;
-  align-items: center;
-  gap: 15px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .class-label {
   font-weight: bold;
   color: #333;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .class-select {
-  padding: 10px 15px;
+  padding: 0.75rem;
   border: 2px solid #ddd;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 0.875rem;
   background-color: white;
   cursor: pointer;
   transition: border-color 0.3s;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
 }
 
 .class-select:focus {
@@ -101,34 +103,36 @@
 .class-info {
   background: #f9f9f9;
   border-left: 4px solid #667eea;
-  padding: 15px;
-  margin-bottom: 20px;
+  padding: 1rem;
+  margin-bottom: 1rem;
   border-radius: 4px;
 }
 
 .class-info p {
   margin: 5px 0;
   color: #555;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .admin-nav {
   display: flex;
-  gap: 10px;
-  margin-bottom: 30px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
 }
 
 .nav-btn {
-  padding: 10px 20px;
+  padding: 0.75rem 1rem;
   border: 2px solid #ddd;
   background: white;
   border-radius: 6px;
   cursor: pointer;
   font-weight: bold;
-  font-size: 14px;
+  font-size: 0.875rem;
   transition: all 0.3s;
   color: #333;
+  width: 100%;
+  text-align: left;
 }
 
 .nav-btn.active {
@@ -142,34 +146,121 @@
   color: #667eea;
 }
 
-.admin-section {
-  margin-top: 20px;
-}
-
 .admin-section h2 {
   color: #333;
   margin-top: 0;
   border-bottom: 2px solid #ddd;
-  padding-bottom: 15px;
+  padding-bottom: 1rem;
+  font-size: 1.25rem;
+}
+
+/* Admin Tab Navigation */
+.admin-tabs {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  border-bottom: 2px solid #ddd;
+  padding-bottom: 0.75rem;
+}
+
+.tab-btn {
+  padding: 0.75rem 1rem;
+  background: #f0f0f0;
+  color: #333;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: normal;
+  font-size: 0.875rem;
+  transition: all 0.3s;
+  flex: 1;
+  min-width: 100px;
+  text-align: center;
+}
+
+.tab-btn.active {
+  background: #007bff;
+  color: white;
+  font-weight: bold;
+}
+
+.tab-btn:hover {
+  background: #e0e0e0;
+}
+
+.tab-btn.active:hover {
+  background: #0056b3;
+}
+
+.search-section {
+  margin-bottom: 1rem;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+.department-date-selector {
+  display: flex;
+  flex-direction: row;
+  gap: 1rem;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.selector-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 150px;
+}
+
+.selector-group label {
+  font-weight: bold;
+  color: #333;
+  font-size: 0.875rem;
+}
+
+.selector-group select,
+.selector-group input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  background-color: white;
+  cursor: pointer;
+  min-height: 44px;
+  box-sizing: border-box;
 }
 
 .form-section {
   background: #f9f9f9;
-  padding: 20px;
+  padding: 1rem;
   border-radius: 8px;
-  margin-bottom: 20px;
+  margin-bottom: 1rem;
 }
 
 .form-section h3 {
   margin-top: 0;
   color: #333;
+  font-size: 1rem;
 }
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 15px;
-  margin-bottom: 15px;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
 }
 
 .form-group {
@@ -181,18 +272,21 @@
   font-weight: bold;
   color: #333;
   margin-bottom: 5px;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .form-group input,
 .form-group select,
 .form-group textarea {
-  padding: 10px;
+  padding: 0.75rem;
   border: 2px solid #ddd;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-family: Arial, sans-serif;
   transition: border-color 0.3s;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
 }
 
 .form-group input:focus,
@@ -202,16 +296,52 @@
   border-color: #667eea;
 }
 
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrapper input {
+  padding-right: 2.5rem;
+}
+
+.eye-icon-btn {
+  position: absolute;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.25rem;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.eye-icon-btn:hover {
+  opacity: 0.7;
+}
+
+.eye-icon-btn:active {
+  opacity: 0.9;
+}
+
 .add-btn {
-  padding: 10px 20px;
+  padding: 0.75rem 1rem;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
   border-radius: 6px;
   cursor: pointer;
   font-weight: bold;
-  font-size: 14px;
+  font-size: 0.875rem;
   transition: transform 0.2s;
+  width: 100%;
+  min-height: 44px;
 }
 
 .add-btn:hover {
@@ -221,28 +351,31 @@
 .data-list {
   background: white;
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .list-header {
   background: #f9f9f9;
-  padding: 15px;
-  font-weight: bold;
+  padding: 1rem;
+  font-weight: 700;
   color: #333;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
   border-bottom: 2px solid #ddd;
+  font-size: 0.9375rem;
 }
 
 .list-item {
-  padding: 15px;
-  border-bottom: 1px solid #ddd;
+  padding: 1rem;
+  border-bottom: 2px solid #999;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-  align-items: center;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+  align-items: flex-start;
+  font-size: 0.9375rem;
+  font-weight: 500;
 }
 
 .list-item:hover {
@@ -250,18 +383,21 @@
 }
 
 .list-item:last-child {
-  border-bottom: none;
+  border-bottom: 2px solid #999;
 }
 
 .delete-btn {
-  padding: 5px 10px;
+  padding: 0.5rem 0.75rem;
   background: #e74c3c;
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 0.8125rem;
+  font-weight: 600;
   transition: background 0.3s;
+  min-width: 60px;
+  min-height: 32px;
 }
 
 .delete-btn:hover {
@@ -275,7 +411,15 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   border-radius: 8px;
   overflow: hidden;
-  margin-top: 20px;
+  margin-top: 1rem;
+  min-width: auto;
+}
+
+/* Wrap table in a scrollable container for mobile */
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
 }
 
 .attendance-table thead {
@@ -284,10 +428,11 @@
 }
 
 .attendance-table th {
-  padding: 15px;
+  padding: 0.5rem;
   text-align: left;
-  font-weight: bold;
+  font-weight: 700;
   border-right: 1px solid #ddd;
+  font-size: 0.75rem;
 }
 
 .attendance-table th:last-child {
@@ -308,8 +453,23 @@
 }
 
 .attendance-table td {
-  padding: 15px;
+  padding: 0.75rem;
   border-right: 1px solid #ddd;
+  font-size: 0.875rem;
+}
+
+.attendance-table tbody tr:hover {
+  background-color: #f5f5f5;
+}
+
+.attendance-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.attendance-table td {
+  padding: 0.5rem;
+  border-right: 1px solid #ddd;
+  font-size: 0.75rem;
 }
 
 .attendance-table td:last-child {
@@ -324,19 +484,56 @@
   width: 20px;
   height: 20px;
   cursor: pointer;
+  min-width: 20px;
+  min-height: 20px;
+  padding: 4px;
 }
 
 .reason-input {
   width: 100%;
-  padding: 8px;
+  padding: 0.5rem;
   border: 2px solid #ddd;
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-family: Arial, sans-serif;
   box-sizing: border-box;
   transition:
     border-color 0.3s,
     box-shadow 0.3s;
+  min-height: 36px;
+}
+
+/* Mobile - Hide Name Column on mobile (screens < 641px) */
+@media (max-width: 640px) {
+  .name-column {
+    display: none;
+  }
+
+  /* Show Roll No format on mobile */
+  .desktop-content {
+    display: none;
+  }
+
+  .mobile-content {
+    display: inline;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  table td:first-child {
+    white-space: nowrap;
+  }
+}
+
+/* Desktop - Show normal content */
+@media (min-width: 641px) {
+  .mobile-content {
+    display: none;
+  }
+
+  .desktop-content {
+    display: inline;
+  }
 }
 
 .reason-input:disabled {
@@ -357,15 +554,16 @@
 
 .informed-select {
   width: 100%;
-  padding: 8px;
+  padding: 0.5rem;
   border: 2px solid #ddd;
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-family: Arial, sans-serif;
   box-sizing: border-box;
   transition:
     border-color 0.3s,
     box-shadow 0.3s;
+  min-height: 36px;
 }
 
 .informed-select:disabled {
@@ -386,18 +584,20 @@
 
 .submit-btn {
   display: block;
-  margin: 30px auto 0;
-  padding: 12px 40px;
+  margin: 1.5rem auto 0;
+  padding: 0.75rem 1.5rem;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: 16px;
+  font-size: 0.875rem;
   font-weight: bold;
   cursor: pointer;
   transition:
     transform 0.2s,
     box-shadow 0.2s;
+  width: 100%;
+  min-height: 44px;
 }
 
 .submit-btn:hover {
@@ -410,69 +610,71 @@
 }
 
 .report-container {
-  margin-top: 20px;
+  margin-top: 1rem;
 }
 
 .report-section {
   background: #f9f9f9;
-  padding: 20px;
-  margin-bottom: 20px;
+  padding: 1rem;
+  margin-bottom: 1rem;
   border-radius: 8px;
   border-left: 4px solid #667eea;
 }
 
 .report-department {
   background: white;
-  margin: 10px 0;
-  padding: 15px;
+  margin: 0.5rem 0;
+  padding: 1rem;
   border-radius: 6px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .report-department-title {
   font-weight: bold;
-  font-size: 16px;
-  color: #333;
-  margin: 0 0 10px 0;
-  padding-bottom: 10px;
+  font-size: 1rem;
+  color: #000;
+  margin: 0 0 0.75rem 0;
+  padding-bottom: 0.75rem;
   border-bottom: 2px solid #667eea;
 }
 
 .report-class {
   background: #f9f9f9;
-  margin: 10px 0;
-  padding: 10px;
+  margin: 0.5rem 0;
+  padding: 0.75rem;
   border-radius: 4px;
   border-left: 3px solid #764ba2;
 }
 
 .report-class-title {
   font-weight: bold;
-  color: #555;
-  margin: 0 0 8px 0;
-  font-size: 14px;
+  color: #333;
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
 }
 
 .report-student {
-  padding: 8px;
-  margin: 5px 0;
+  padding: 0.5rem;
+  margin: 3px 0;
   background: white;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: #666;
 }
 
 .export-btn {
-  padding: 10px 20px;
+  padding: 0.75rem 1rem;
   background: linear-gradient(135deg, #27ae60 0%, #16a085 100%);
   color: white;
   border: none;
   border-radius: 6px;
   cursor: pointer;
   font-weight: bold;
-  font-size: 14px;
+  font-size: 0.875rem;
   transition: transform 0.2s;
-  margin: 10px 5px 10px 0;
+  margin: 0.5rem 0.25rem 0.5rem 0;
+  min-height: 44px;
+  width: 100%;
 }
 
 .export-btn:hover {
@@ -494,8 +696,8 @@
 
   .attendance-table th,
   .attendance-table td {
-    padding: 10px;
-    font-size: 14px;
+    padding: 0.5rem;
+    font-size: 0.75rem;
   }
 
   .reason-input {
@@ -532,35 +734,35 @@
 
 /* Management Tab Styles */
 .programs-nav {
-  margin-bottom: 25px;
+  margin-bottom: 1.5rem;
   background: #f9f9f9;
-  padding: 15px;
+  padding: 1rem;
   border-radius: 6px;
 }
 
 .programs-nav h3 {
-  margin: 0 0 15px 0;
+  margin: 0 0 1rem 0;
   color: #333;
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .program-buttons {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .program-btn {
-  padding: 10px 20px;
+  padding: 0.75rem 1rem;
   border: 2px solid #ddd;
   background: white;
   border-radius: 6px;
   cursor: pointer;
   font-weight: bold;
-  font-size: 14px;
+  font-size: 0.875rem;
   transition: all 0.3s;
   color: #333;
-  min-width: 80px;
+  width: 100%;
 }
 
 .program-btn.active {
@@ -575,35 +777,37 @@
 }
 
 .departments-nav {
-  margin-bottom: 25px;
+  margin-bottom: 1.5rem;
   background: #f0f4ff;
-  padding: 15px;
+  padding: 1rem;
   border-radius: 6px;
   border-left: 4px solid #667eea;
 }
 
 .departments-nav h3 {
-  margin: 0 0 15px 0;
+  margin: 0 0 1rem 0;
   color: #333;
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .department-buttons {
   display: flex;
-  gap: 10px;
+  flex-direction: column;
+  gap: 0.5rem;
   flex-wrap: wrap;
 }
 
 .dept-btn {
-  padding: 10px 20px;
+  padding: 0.75rem 1rem;
   border: 2px solid #667eea;
   background: white;
   border-radius: 6px;
   cursor: pointer;
   font-weight: bold;
-  font-size: 14px;
+  font-size: 0.875rem;
   transition: all 0.3s;
   color: #667eea;
+  width: 100%;
 }
 
 .dept-btn.active {
@@ -617,35 +821,36 @@
 }
 
 .classes-nav {
-  margin-bottom: 25px;
+  margin-bottom: 1.5rem;
   background: #fff5e6;
-  padding: 15px;
+  padding: 1rem;
   border-radius: 6px;
   border-left: 4px solid #ffa500;
 }
 
 .classes-nav h3 {
-  margin: 0 0 15px 0;
+  margin: 0 0 1rem 0;
   color: #333;
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .class-buttons {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .class-btn {
-  padding: 10px 20px;
+  padding: 0.75rem 1rem;
   border: 2px solid #ffa500;
   background: white;
   border-radius: 6px;
   cursor: pointer;
   font-weight: bold;
-  font-size: 14px;
+  font-size: 0.875rem;
   transition: all 0.3s;
   color: #ff8c00;
+  width: 100%;
 }
 
 .class-btn.active {
@@ -655,37 +860,39 @@
 }
 
 .department-details {
-  margin-top: 20px;
+  margin-top: 1rem;
   background: #f5f5f5;
-  padding: 20px;
+  padding: 1rem;
   border-radius: 6px;
   border: 1px solid #ddd;
 }
 
 .department-details h3 {
-  margin: 0 0 15px 0;
+  margin: 0 0 1rem 0;
   color: #333;
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 .department-details p {
-  margin: 10px 0;
+  margin: 0.75rem 0;
   color: #555;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .back-btn {
-  padding: 12px 24px;
+  padding: 0.75rem 1.5rem;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: 16px;
-  font-weight: bold;
+  font-size: 0.875rem;
+  font-weight: 600;
   cursor: pointer;
   transition:
     transform 0.2s,
     box-shadow 0.2s;
+  width: auto;
+  min-height: 44px;
 }
 
 .back-btn:hover {
@@ -698,15 +905,444 @@
 }
 
 .react-datepicker__input-container input {
-  height: 42px;
-  padding: 0 15px;
-
+  min-height: 44px;
+  padding: 0 0.75rem;
   line-height: normal;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-family: Arial, sans-serif;
-
   display: flex;
   align-items: center;
-
   box-sizing: border-box;
+  width: 100%;
+}
+
+/* Responsive Design: Small phones (320px - 375px) */
+@media (max-width: 375px) {
+  .attendance-container {
+    padding: 0.5rem;
+  }
+
+  .attendance-card {
+    padding: 0.75rem;
+  }
+
+  .attendance-header {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .attendance-header > div:first-child h1 {
+    font-size: 1.25rem;
+  }
+
+  .teacher-name {
+    font-size: 0.75rem;
+  }
+
+  .logout-btn {
+    font-size: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .form-grid {
+    gap: 0.75rem;
+  }
+
+  .admin-nav {
+    gap: 0.25rem;
+  }
+
+  .nav-btn {
+    font-size: 0.75rem;
+    padding: 0.625rem 0.75rem;
+  }
+
+  .admin-tabs {
+    gap: 0.25rem;
+  }
+
+  .tab-btn {
+    font-size: 0.75rem;
+    padding: 0.625rem 0.75rem;
+  }
+
+  .selector-group {
+    gap: 0.375rem;
+  }
+}
+
+/* Responsive Design: Phones (376px - 480px) */
+@media (min-width: 376px) and (max-width: 480px) {
+  .attendance-container {
+    padding: 0.75rem;
+  }
+
+  .attendance-card {
+    padding: 1rem;
+  }
+
+  .attendance-header {
+    gap: 0.75rem;
+  }
+
+  .attendance-header > div:first-child h1 {
+    font-size: 1.375rem;
+  }
+
+  .form-grid {
+    gap: 0.875rem;
+  }
+
+  .list-header,
+  .list-item {
+    padding: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .list-header {
+    font-weight: 700;
+  }
+
+  .attendance-table th,
+  .attendance-table td {
+    padding: 0.625rem;
+    font-size: 0.8125rem;
+  }
+
+  .logout-btn {
+    margin-top: 0.5rem;
+  }
+
+  .admin-tabs {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .tab-btn {
+    flex: 1;
+    min-width: 100px;
+  }
+}
+
+/* Responsive Design: Small tablets (481px - 640px) */
+@media (min-width: 481px) and (max-width: 640px) {
+  .attendance-container {
+    padding: 1rem;
+  }
+
+  .attendance-card {
+    padding: 1.25rem;
+  }
+
+  .attendance-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .attendance-header > div:first-child h1 {
+    font-size: 1.5rem;
+  }
+
+  .form-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+
+  .admin-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .nav-btn {
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .program-buttons,
+  .department-buttons,
+  .class-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .program-btn,
+  .dept-btn,
+  .class-btn {
+    width: auto;
+    flex: 0 1 calc(50% - 0.25rem);
+    min-width: auto;
+  }
+
+  .class-selector-section {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 0.75rem;
+  }
+
+  .class-label {
+    margin-bottom: 0;
+    min-width: 80px;
+  }
+
+  .class-select {
+    flex: 1;
+  }
+
+  .admin-tabs {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .tab-btn {
+    width: auto;
+    flex: 1;
+    min-width: 100px;
+  }
+
+  .department-date-selector {
+    flex-direction: row;
+    gap: 1rem;
+  }
+
+  .selector-group {
+    flex: 1;
+  }
+
+  .attendance-table th,
+  .attendance-table td {
+    padding: 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .attendance-table {
+    min-width: 600px;
+  }
+}
+
+/* Responsive Design: Tablets and desktops (641px - 768px) */
+@media (min-width: 641px) and (max-width: 768px) {
+  .attendance-container {
+    padding: 1.25rem;
+  }
+
+  .attendance-card {
+    padding: 1.5rem;
+  }
+
+  .attendance-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .form-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .admin-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .nav-btn {
+    width: auto;
+  }
+
+  .program-buttons,
+  .department-buttons,
+  .class-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .program-btn,
+  .dept-btn,
+  .class-btn {
+    width: auto;
+  }
+
+  .list-header,
+  .list-item {
+    grid-template-columns: repeat(2, 1fr);
+    font-size: 0.9375rem;
+    font-weight: 500;
+  }
+
+  .list-header {
+    font-weight: 700;
+  }
+
+  .class-selector-section {
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .class-select {
+    max-width: 400px;
+  }
+
+  .attendance-table th,
+  .attendance-table td {
+    padding: 0.875rem;
+    font-size: 0.9375rem;
+  }
+
+  .attendance-table {
+    min-width: 650px;
+  }
+}
+
+/* Large tablets and desktops (769px+) */
+@media (min-width: 769px) {
+  .attendance-container {
+    padding: 1.5rem;
+  }
+
+  .attendance-card {
+    padding: 2rem;
+  }
+
+  .attendance-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .attendance-container h1 {
+    font-size: 2rem;
+    font-weight: 700;
+  }
+
+  .attendance-header > div:first-child h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+  }
+
+  .teacher-name {
+    font-size: 1.0625rem;
+    font-weight: 500;
+  }
+
+  .tab-btn {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  label {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 1rem;
+    font-weight: 500;
+  }
+
+  table {
+    font-size: 1rem;
+    font-weight: 500;
+  }
+
+  td,
+  th {
+    font-size: 1rem;
+    font-weight: 500;
+  }
+
+  th {
+    font-weight: 700;
+  }
+
+  .form-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .change-password-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .admin-nav {
+    flex-direction: row;
+    gap: 1rem;
+  }
+
+  .nav-btn {
+    width: auto;
+  }
+
+  .program-buttons,
+  .department-buttons,
+  .class-buttons {
+    flex-direction: row;
+    gap: 1rem;
+  }
+
+  .program-btn,
+  .dept-btn,
+  .class-btn {
+    width: auto;
+    min-width: 120px;
+  }
+
+  .list-header,
+  .list-item {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    font-size: 1rem;
+    font-weight: 500;
+  }
+
+  .list-header {
+    font-weight: 700;
+  }
+
+  .class-selector-section {
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .class-select {
+    max-width: 300px;
+  }
+
+  .export-btn {
+    width: auto;
+    margin: 0.5rem 0.25rem 0.5rem 0;
+  }
+
+  .submit-btn {
+    width: auto;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .attendance-table th,
+  .attendance-table td {
+    padding: 1rem;
+    font-size: 1rem;
+    font-weight: 500;
+  }
+
+  .attendance-table th {
+    font-weight: 700;
+  }
+
+  .attendance-table {
+    min-width: 700px;
+  }
 }

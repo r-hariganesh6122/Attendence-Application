@@ -374,7 +374,7 @@ export default function ClassDetailsPage({ params }) {
 
   const handleSelectStudent = (student) => {
     setSelectedStudent(student);
-    setAttendanceSearch(student.studentName);
+    setAttendanceSearch("");
     fetchStudentAttendance(student.id);
   };
 
@@ -419,7 +419,8 @@ export default function ClassDetailsPage({ params }) {
               <div
                 style={{
                   display: "flex",
-                  gap: "10px",
+                  flexWrap: "wrap",
+                  gap: "8px",
                   marginBottom: "20px",
                   borderBottom: "2px solid #ddd",
                   paddingBottom: "10px",
@@ -428,15 +429,18 @@ export default function ClassDetailsPage({ params }) {
                 <button
                   onClick={() => setStudentTab("list")}
                   style={{
-                    padding: "10px 20px",
+                    padding: "10px 12px",
                     backgroundColor:
                       studentTab === "list" ? "#007bff" : "#f0f0f0",
                     color: studentTab === "list" ? "white" : "#333",
                     border: "none",
                     borderRadius: "4px",
                     cursor: "pointer",
-                    fontWeight: studentTab === "list" ? "bold" : "normal",
+                    fontSize: "0.875rem",
+                    fontWeight: studentTab === "list" ? 700 : 600,
                     transition: "all 0.3s",
+                    flex: "1 1 auto",
+                    minWidth: "70px",
                   }}
                 >
                   List
@@ -444,52 +448,59 @@ export default function ClassDetailsPage({ params }) {
                 <button
                   onClick={() => setStudentTab("addStudent")}
                   style={{
-                    padding: "10px 20px",
+                    padding: "10px 12px",
                     backgroundColor:
                       studentTab === "addStudent" ? "#007bff" : "#f0f0f0",
                     color: studentTab === "addStudent" ? "white" : "#333",
                     border: "none",
                     borderRadius: "4px",
                     cursor: "pointer",
-                    fontWeight: studentTab === "addStudent" ? "bold" : "normal",
+                    fontSize: "0.875rem",
+                    fontWeight: studentTab === "addStudent" ? 700 : 600,
                     transition: "all 0.3s",
+                    flex: "1 1 auto",
+                    minWidth: "70px",
                   }}
                 >
-                  Add Student
+                  Add
                 </button>
                 <button
                   onClick={() => setStudentTab("removeStudent")}
                   style={{
-                    padding: "10px 20px",
+                    padding: "10px 12px",
                     backgroundColor:
                       studentTab === "removeStudent" ? "#007bff" : "#f0f0f0",
                     color: studentTab === "removeStudent" ? "white" : "#333",
                     border: "none",
                     borderRadius: "4px",
                     cursor: "pointer",
-                    fontWeight:
-                      studentTab === "removeStudent" ? "bold" : "normal",
+                    fontSize: "0.875rem",
+                    fontWeight: studentTab === "removeStudent" ? 700 : 600,
                     transition: "all 0.3s",
+                    flex: "1 1 auto",
+                    minWidth: "70px",
                   }}
                 >
-                  Remove Student
+                  Remove
                 </button>
                 <button
                   onClick={() => setStudentTab("editStudent")}
                   style={{
-                    padding: "10px 20px",
+                    padding: "10px 12px",
                     backgroundColor:
                       studentTab === "editStudent" ? "#007bff" : "#f0f0f0",
                     color: studentTab === "editStudent" ? "white" : "#333",
                     border: "none",
                     borderRadius: "4px",
                     cursor: "pointer",
-                    fontWeight:
-                      studentTab === "editStudent" ? "bold" : "normal",
+                    fontSize: "0.875rem",
+                    fontWeight: studentTab === "editStudent" ? 700 : 600,
                     transition: "all 0.3s",
+                    flex: "1 1 auto",
+                    minWidth: "70px",
                   }}
                 >
-                  Edit Student
+                  Edit
                 </button>
               </div>
 
@@ -875,7 +886,8 @@ export default function ClassDetailsPage({ params }) {
               <div
                 style={{
                   display: "flex",
-                  gap: "10px",
+                  flexWrap: "wrap",
+                  gap: "8px",
                   marginBottom: "20px",
                   borderBottom: "2px solid #ddd",
                   paddingBottom: "10px",
@@ -888,15 +900,18 @@ export default function ClassDetailsPage({ params }) {
                     fetchAllTeachers();
                   }}
                   style={{
-                    padding: "10px 20px",
+                    padding: "10px 12px",
                     backgroundColor:
                       teacherTab === "list" ? "#007bff" : "#f0f0f0",
                     color: teacherTab === "list" ? "white" : "#333",
                     border: "none",
                     borderRadius: "4px",
                     cursor: "pointer",
-                    fontWeight: teacherTab === "list" ? "bold" : "normal",
+                    fontSize: "0.875rem",
+                    fontWeight: teacherTab === "list" ? 700 : 600,
                     transition: "all 0.3s",
+                    flex: "1 1 auto",
+                    minWidth: "70px",
                   }}
                 >
                   List
@@ -908,15 +923,18 @@ export default function ClassDetailsPage({ params }) {
                     fetchAllTeachers();
                   }}
                   style={{
-                    padding: "10px 20px",
+                    padding: "10px 12px",
                     backgroundColor:
                       teacherTab === "addTeacher" ? "#007bff" : "#f0f0f0",
                     color: teacherTab === "addTeacher" ? "white" : "#333",
                     border: "none",
                     borderRadius: "4px",
                     cursor: "pointer",
-                    fontWeight: teacherTab === "addTeacher" ? "bold" : "normal",
+                    fontSize: "0.875rem",
+                    fontWeight: teacherTab === "addTeacher" ? 700 : 600,
                     transition: "all 0.3s",
+                    flex: "1 1 auto",
+                    minWidth: "70px",
                   }}
                 >
                   Add
@@ -927,16 +945,18 @@ export default function ClassDetailsPage({ params }) {
                     fetchCourses();
                   }}
                   style={{
-                    padding: "10px 20px",
+                    padding: "10px 12px",
                     backgroundColor:
                       teacherTab === "removeTeacher" ? "#007bff" : "#f0f0f0",
                     color: teacherTab === "removeTeacher" ? "white" : "#333",
                     border: "none",
                     borderRadius: "4px",
                     cursor: "pointer",
-                    fontWeight:
-                      teacherTab === "removeTeacher" ? "bold" : "normal",
+                    fontSize: "0.875rem",
+                    fontWeight: teacherTab === "removeTeacher" ? 700 : 600,
                     transition: "all 0.3s",
+                    flex: "1 1 auto",
+                    minWidth: "70px",
                   }}
                 >
                   Remove
@@ -947,16 +967,18 @@ export default function ClassDetailsPage({ params }) {
                     fetchAllTeachers();
                   }}
                   style={{
-                    padding: "10px 20px",
+                    padding: "10px 12px",
                     backgroundColor:
                       teacherTab === "editTeacher" ? "#007bff" : "#f0f0f0",
                     color: teacherTab === "editTeacher" ? "white" : "#333",
                     border: "none",
                     borderRadius: "4px",
                     cursor: "pointer",
-                    fontWeight:
-                      teacherTab === "editTeacher" ? "bold" : "normal",
+                    fontSize: "0.875rem",
+                    fontWeight: teacherTab === "editTeacher" ? 700 : 600,
                     transition: "all 0.3s",
+                    flex: "1 1 auto",
+                    minWidth: "70px",
                   }}
                 >
                   Edit
@@ -1597,7 +1619,7 @@ export default function ClassDetailsPage({ params }) {
               </div>
 
               {/* Matching Students List */}
-              {attendanceSearch.trim() && !selectedStudent && (
+              {attendanceSearch.trim() && (
                 <div
                   style={{
                     marginBottom: "20px",

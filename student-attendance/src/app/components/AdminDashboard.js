@@ -7,19 +7,41 @@ import "../attendance.css";
 export default function AdminDashboard({ user, onLogout }) {
   // State for change password form
   const [changePasswordMobile, setChangePasswordMobile] = useState("");
+  const [changePasswordOld, setChangePasswordOld] = useState("");
   const [changePasswordNew, setChangePasswordNew] = useState("");
+  const [changePasswordConfirm, setChangePasswordConfirm] = useState("");
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Handler for change password
   const handleChangePassword = async () => {
-    if (!changePasswordMobile.trim() || !changePasswordNew.trim()) {
-      alert("Please enter both mobile number and new password");
+    if (
+      !changePasswordMobile.trim() ||
+      !changePasswordOld.trim() ||
+      !changePasswordNew.trim() ||
+      !changePasswordConfirm.trim()
+    ) {
+      alert("Please fill in all fields");
       return;
     }
+
+    if (changePasswordNew !== changePasswordConfirm) {
+      alert("New password and confirmation password do not match");
+      return;
+    }
+
+    if (changePasswordNew.length < 6) {
+      alert("New password must be at least 6 characters long");
+      return;
+    }
+
     try {
       const res = await apiCall("/api/teachers", {
         method: "PUT",
         body: JSON.stringify({
           teacherId: parseInt(changePasswordMobile),
+          oldPassword: changePasswordOld,
           password: changePasswordNew,
         }),
       });
@@ -27,7 +49,9 @@ export default function AdminDashboard({ user, onLogout }) {
       if (data.success) {
         alert("Password changed successfully!");
         setChangePasswordMobile("");
+        setChangePasswordOld("");
         setChangePasswordNew("");
+        setChangePasswordConfirm("");
         fetchTeachers();
       } else {
         alert("Error: " + data.message);
@@ -495,76 +519,84 @@ export default function AdminDashboard({ user, onLogout }) {
             <style>
               body {
                 font-family: Arial, sans-serif;
-                margin: 20px;
-                line-height: 1.6;
+                margin: 30px 15px;
+                line-height: 1.4;
               }
               h1 {
                 text-align: center;
                 color: #333;
-                margin-bottom: 5px;
+                margin: 0 0 3px 0;
+                font-size: 24px;
               }
               .report-info {
                 text-align: center;
                 color: #666;
-                margin-bottom: 10px;
-                font-size: 14px;
+                margin: 0 0 2px 0;
+                font-size: 13px;
               }
               .date {
                 text-align: center;
                 color: #999;
-                margin-bottom: 20px;
-                font-size: 12px;
+                margin-bottom: 15px;
+                font-size: 11px;
               }
               table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: 30px;
+                margin: 12px 0 8px 0;
+                font-size: 13px;
               }
               th {
                 background-color: #34495e;
-                color: white;
-                padding: 12px;
+                color: #000;
+                padding: 8px 10px;
                 text-align: left;
                 border: 1px solid #333;
                 font-weight: bold;
               }
               td {
-                padding: 10px 12px;
+                padding: 7px 10px;
                 border: 1px solid #bbb;
                 text-align: left;
               }
               tr:nth-child(even) {
                 background-color: #f9f9f9;
               }
-              tr:hover {
-                background-color: #ecf0f1;
+              .department-wrapper {
+                page-break-after: always;
+                margin-bottom: 0;
+                padding-bottom: 20px;
               }
               .department-header {
-                background-color: #2c3e50;
-                color: white;
-                font-size: 18px;
+                background-color: #f0f0f0;
+                color: #000;
+                font-size: 20px;
                 font-weight: bold;
-                padding: 15px;
-                margin-top: 20px;
-                margin-bottom: 10px;
+                padding: 12px 12px;
+                margin: 0 0 8px 0;
+                border-bottom: 2px solid #667eea;
               }
               .class-header {
-                background-color: #34495e;
-                color: white;
+                background-color: #f9f9f9;
+                color: #333;
                 font-size: 16px;
                 font-weight: bold;
-                padding: 12px;
-                margin-top: 15px;
-                margin-bottom: 8px;
+                padding: 10px 10px;
+                margin: 8px 0 1px 0;
+                border-left: 3px solid #764ba2;
               }
               .no-absences {
                 color: #27ae60;
-                padding: 10px;
+                padding: 8px 10px;
                 font-style: italic;
+                font-size: 13px;
+                margin: 8px 0 0 0;
               }
               @media print {
-                body { margin: 10px; }
-                table { page-break-inside: avoid; }
+                body { margin: 30px 15px; }
+                table { page-break-inside: auto; margin: 12px 0 8px 0; }
+                tr { page-break-inside: avoid; page-break-after: auto; }
+                .department-wrapper { page-break-after: always; margin-bottom: 0; padding-bottom: 20px; }
               }
             </style>
           </head>
@@ -575,6 +607,7 @@ export default function AdminDashboard({ user, onLogout }) {
       `;
 
       Object.entries(report).forEach(([deptName, absencesByClass]) => {
+        printContent += `<div class="department-wrapper">`;
         printContent += `<div class="department-header">${deptName}</div>`;
         Object.entries(absencesByClass).forEach(([className, absences]) => {
           printContent += `<div class="class-header">Class: ${className}</div>`;
@@ -624,6 +657,7 @@ export default function AdminDashboard({ user, onLogout }) {
             printContent += `<div class="no-absences">No absences</div>`;
           }
         });
+        printContent += `</div>`;
       });
 
       printContent += `
@@ -756,78 +790,28 @@ export default function AdminDashboard({ user, onLogout }) {
             <h2>Teachers</h2>
 
             {/* Teacher Sub-tabs Navigation */}
-            <div
-              style={{
-                display: "flex",
-                gap: "10px",
-                marginBottom: "20px",
-                borderBottom: "2px solid #ddd",
-                paddingBottom: "10px",
-              }}
-            >
+            <div className="admin-tabs">
               <button
                 onClick={() => setTeacherTab("list")}
-                style={{
-                  padding: "10px 20px",
-                  backgroundColor:
-                    teacherTab === "list" ? "#007bff" : "#f0f0f0",
-                  color: teacherTab === "list" ? "white" : "#333",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontWeight: teacherTab === "list" ? "bold" : "normal",
-                  transition: "all 0.3s",
-                }}
+                className={`tab-btn ${teacherTab === "list" ? "active" : ""}`}
               >
                 List
               </button>
               <button
                 onClick={() => setTeacherTab("addTeacher")}
-                style={{
-                  padding: "10px 20px",
-                  backgroundColor:
-                    teacherTab === "addTeacher" ? "#007bff" : "#f0f0f0",
-                  color: teacherTab === "addTeacher" ? "white" : "#333",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontWeight: teacherTab === "addTeacher" ? "bold" : "normal",
-                  transition: "all 0.3s",
-                }}
+                className={`tab-btn ${teacherTab === "addTeacher" ? "active" : ""}`}
               >
                 Add Teacher
               </button>
               <button
                 onClick={() => setTeacherTab("removeTeacher")}
-                style={{
-                  padding: "10px 20px",
-                  backgroundColor:
-                    teacherTab === "removeTeacher" ? "#007bff" : "#f0f0f0",
-                  color: teacherTab === "removeTeacher" ? "white" : "#333",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontWeight:
-                    teacherTab === "removeTeacher" ? "bold" : "normal",
-                  transition: "all 0.3s",
-                }}
+                className={`tab-btn ${teacherTab === "removeTeacher" ? "active" : ""}`}
               >
                 Remove Teacher
               </button>
               <button
                 onClick={() => setTeacherTab("changePassword")}
-                style={{
-                  padding: "10px 20px",
-                  backgroundColor:
-                    teacherTab === "changePassword" ? "#007bff" : "#f0f0f0",
-                  color: teacherTab === "changePassword" ? "white" : "#333",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontWeight:
-                    teacherTab === "changePassword" ? "bold" : "normal",
-                  transition: "all 0.3s",
-                }}
+                className={`tab-btn ${teacherTab === "changePassword" ? "active" : ""}`}
               >
                 Change Password
               </button>
@@ -957,9 +941,9 @@ export default function AdminDashboard({ user, onLogout }) {
             {teacherTab === "changePassword" && (
               <div className="form-section">
                 <h3>Change Password</h3>
-                <div className="form-grid">
+                <div className="form-grid change-password-grid">
                   <div className="form-group">
-                    <label>Mobile Number</label>
+                    <label>Teacher Mobile Number</label>
                     <input
                       type="tel"
                       value={changePasswordMobile || ""}
@@ -968,13 +952,73 @@ export default function AdminDashboard({ user, onLogout }) {
                     />
                   </div>
                   <div className="form-group">
+                    <label>Old Password</label>
+                    <div className="password-input-wrapper">
+                      <input
+                        type={showOldPassword ? "text" : "password"}
+                        value={changePasswordOld || ""}
+                        onChange={(e) => setChangePasswordOld(e.target.value)}
+                        placeholder="Enter current password"
+                      />
+                      <button
+                        type="button"
+                        className="eye-icon-btn"
+                        onClick={() => setShowOldPassword(!showOldPassword)}
+                        title={
+                          showOldPassword ? "Hide password" : "Show password"
+                        }
+                      >
+                        {showOldPassword ? "👁️" : "👁️‍🗨️"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="form-group">
                     <label>New Password</label>
-                    <input
-                      type="password"
-                      value={changePasswordNew || ""}
-                      onChange={(e) => setChangePasswordNew(e.target.value)}
-                      placeholder="Enter new password"
-                    />
+                    <div className="password-input-wrapper">
+                      <input
+                        type={showNewPassword ? "text" : "password"}
+                        value={changePasswordNew || ""}
+                        onChange={(e) => setChangePasswordNew(e.target.value)}
+                        placeholder="Enter new password (min 6 characters)"
+                      />
+                      <button
+                        type="button"
+                        className="eye-icon-btn"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        title={
+                          showNewPassword ? "Hide password" : "Show password"
+                        }
+                      >
+                        {showNewPassword ? "👁️" : "👁️‍🗨️"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Confirm Password</label>
+                    <div className="password-input-wrapper">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={changePasswordConfirm || ""}
+                        onChange={(e) =>
+                          setChangePasswordConfirm(e.target.value)
+                        }
+                        placeholder="Re-enter new password"
+                      />
+                      <button
+                        type="button"
+                        className="eye-icon-btn"
+                        onClick={() =>
+                          setShowConfirmPassword(!showConfirmPassword)
+                        }
+                        title={
+                          showConfirmPassword
+                            ? "Hide password"
+                            : "Show password"
+                        }
+                      >
+                        {showConfirmPassword ? "👁️" : "👁️‍🗨️"}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <button onClick={handleChangePassword} className="add-btn">

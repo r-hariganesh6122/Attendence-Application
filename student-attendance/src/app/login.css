@@ -3,12 +3,12 @@
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  padding: 20px;
+  padding: 1rem;
 }
 
 .login-card {
   background: white;
-  padding: 40px;
+  padding: 1.5rem;
   border-radius: 10px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
   width: 100%;
@@ -19,15 +19,16 @@
   text-align: center;
   color: #333;
   margin: 0 0 10px 0;
-  font-size: 28px;
-  font-weight: bold;
+  font-size: 1.5rem;
+  font-weight: 700;
 }
 
 .login-subtitle {
   text-align: center;
   color: #666;
   margin: 0 0 30px 0;
-  font-size: 14px;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 .login-form {
@@ -36,28 +37,30 @@
 }
 
 .form-group {
-  margin-bottom: 20px;
+  margin-bottom: 1.25rem;
   display: flex;
   flex-direction: column;
 }
 
 .form-label {
-  font-weight: bold;
+  font-weight: 600;
   color: #333;
   margin-bottom: 8px;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .form-input {
-  padding: 12px;
+  padding: 0.75rem;
   border: 2px solid #ddd;
   border-radius: 6px;
-  font-size: 16px;
+  font-size: 1rem;
   font-family: Arial, sans-serif;
   transition:
     border-color 0.3s,
     box-shadow 0.3s;
   box-sizing: border-box;
+  min-height: 44px;
+  font-weight: 500;
 }
 
 .form-input:focus {
@@ -70,6 +73,38 @@
   color: #999;
 }
 
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrapper .form-input {
+  padding-right: 2.5rem;
+}
+
+.eye-icon-btn {
+  position: absolute;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.25rem;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+}
+
+.eye-icon-btn:hover {
+  opacity: 0.7;
+}
+
+.eye-icon-btn:active {
+  opacity: 0.9;
+}
+
 .error-message {
   color: #e74c3c;
   font-size: 13px;
@@ -77,18 +112,19 @@
 }
 
 .login-btn {
-  padding: 12px;
+  padding: 0.75rem;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: 16px;
-  font-weight: bold;
+  font-size: 1rem;
+  font-weight: 700;
   cursor: pointer;
   transition:
     transform 0.2s,
     box-shadow 0.2s;
   margin-top: 10px;
+  min-height: 44px;
 }
 
 .login-btn:hover {
@@ -121,33 +157,126 @@
 
 .role-option input[type="radio"] {
   cursor: pointer;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   accent-color: #667eea;
+  min-width: 20px;
+  padding: 2px;
 }
 
 .role-label {
   cursor: pointer;
-  font-weight: normal;
+  font-weight: 500;
   font-size: 14px;
   margin: 0;
 }
 
-@media (max-width: 480px) {
+/* Small phones (320px - 375px) */
+@media (max-width: 375px) {
+  .login-container {
+    padding: 0.5rem;
+  }
+
   .login-card {
-    padding: 30px 20px;
+    padding: 1.25rem;
+    border-radius: 8px;
   }
 
   .login-title {
-    font-size: 24px;
+    font-size: 1.25rem;
+  }
+
+  .login-subtitle {
+    margin-bottom: 1.5rem;
+  }
+
+  .form-group {
+    margin-bottom: 1rem;
+  }
+
+  .role-selection {
+    gap: 12px;
+  }
+}
+
+/* Phones (375px - 480px) */
+@media (min-width: 376px) and (max-width: 480px) {
+  .login-card {
+    padding: 1.5rem 1.25rem;
+  }
+
+  .login-title {
+    font-size: 1.5rem;
   }
 
   .form-input {
-    font-size: 14px;
+    font-size: 0.95rem;
   }
 
   .role-selection {
     flex-direction: column;
     gap: 10px;
+  }
+}
+
+/* Tablets and up (480px+) */
+@media (min-width: 481px) {
+  .login-card {
+    padding: 2.5rem;
+  }
+
+  .login-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+  }
+
+  .form-input {
+    font-size: 1rem;
+  }
+
+  .form-label {
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+}
+
+/* Large screens / Desktop (769px+) */
+@media (min-width: 769px) {
+  .login-card {
+    padding: 3rem;
+  }
+
+  .login-title {
+    font-size: 2.25rem;
+    font-weight: 700;
+    margin-bottom: 15px;
+  }
+
+  .login-subtitle {
+    font-size: 1rem;
+    font-weight: 500;
+    margin-bottom: 2rem;
+  }
+
+  .form-label {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+
+  .form-input {
+    font-size: 1.0625rem;
+    font-weight: 500;
+  }
+
+  .login-btn {
+    font-size: 1.125rem;
+    font-weight: 700;
+    padding: 1rem;
+  }
+
+  .role-label {
+    font-size: 1rem;
+    font-weight: 500;
   }
 }

@@ -104,6 +104,81 @@ export async function PUT(request) {
       );
     }
 
+    const body = await request.json();
+
+    // Check if this is a password change request (has oldPassword field)
+    if (body.oldPassword) {
+      // Teacher changing their own password
+      const { teacherId: id, oldPassword, password } = body;
+
+      // Verify teacherId matches authenticated user (teachers can only change their own password)
+      if (Number(id) !== user.id) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Forbidden - You can only change your own password",
+          },
+          { status: 403 },
+        );
+      }
+
+      // Validate password field exists
+      if (!password || password.length < 6) {
+        return NextResponse.json(
+          { success: false, message: "Password must be at least 6 characters" },
+          { status: 400 },
+        );
+      }
+
+      // Get current teacher's password hash
+      const teacher = await prisma.user.findUnique({
+        where: { id: Number(id) },
+        select: { passwordHash: true, password: true },
+      });
+
+      if (!teacher) {
+        return NextResponse.json(
+          { success: false, message: "Teacher not found" },
+          { status: 404 },
+        );
+      }
+
+      // Verify old password
+      const isPasswordValid = await bcrypt.compare(
+        oldPassword,
+        teacher.passwordHash || teacher.password,
+      );
+
+      if (!isPasswordValid) {
+        return NextResponse.json(
+          { success: false, message: "Current password is incorrect" },
+          { status: 401 },
+        );
+      }
+
+      // Hash new password and update
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const updatedTeacher = await prisma.user.update({
+        where: { id: Number(id) },
+        data: {
+          passwordHash: hashedPassword,
+          password: password, // Keep plaintext for migration period
+        },
+        select: {
+          id: true,
+          name: true,
+          mobile: true,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "Password changed successfully",
+        teacher: updatedTeacher,
+      });
+    }
+
+    // Regular update (admin only) - for updating name, mobile, etc.
     // Check authorization - only admin can update teachers
     if (user.role !== "admin") {
       return NextResponse.json(
@@ -114,8 +189,6 @@ export async function PUT(request) {
         { status: 403 },
       );
     }
-
-    const body = await request.json();
 
     // Validate request body with Zod
     const validation = validateTeacherUpdate(body);
