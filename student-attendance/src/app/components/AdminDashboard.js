@@ -107,6 +107,20 @@ export default function AdminDashboard({ user, onLogout }) {
   const [expandedTeacherId, setExpandedTeacherId] = useState(null); // Track which teacher's courses are expanded
   const [teacherCourses, setTeacherCourses] = useState({}); // Cache of teacher courses
 
+  // Attendance Lock Management States
+  const [lockManagementTab, setLockManagementTab] = useState("list");
+  const [lockProgram, setLockProgram] = useState(null);
+  const [lockDepartment, setLockDepartment] = useState(null);
+  const [lockClass, setLockClass] = useState(null);
+  const [lockDate, setLockDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
+  const [lockReason, setLockReason] = useState("");
+  const [lockedDates, setLockedDates] = useState([]); // List of locked dates for viewing
+  const [lockDepartments, setLockDepartments] = useState([]);
+  const [lockClasses, setLockClasses] = useState([]);
+  const [isCurrentDateLocked, setIsCurrentDateLocked] = useState(false);
+
   // Fetch teacher courses when expanding a teacher
   const fetchTeacherCourses = async (teacherId) => {
     if (teacherCourses[teacherId]) {
@@ -382,6 +396,92 @@ export default function AdminDashboard({ user, onLogout }) {
     reportClass,
     reportDepartments,
   ]);
+
+  // Fetch locked dates when lock tab or class changes
+  useEffect(() => {
+    if (activeTab === "attendance-lock" && lockClass) {
+      fetchLockedDates();
+    }
+  }, [activeTab, lockClass]);
+
+  // Fetch lock departments based on selected lock program
+  useEffect(() => {
+    async function fetchLockDeptList() {
+      if (!lockProgram) {
+        setLockDepartments([]);
+        setLockDepartment(null);
+        setLockClass(null);
+        return;
+      }
+      try {
+        const res = await apiCall(`/api/departments?program=${lockProgram}`);
+        const data = await res.json();
+        if (data.success) {
+          setLockDepartments(data.departments);
+          setLockDepartment(null);
+          setLockClass(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch departments:", error);
+        setLockDepartments([]);
+      }
+    }
+    fetchLockDeptList();
+  }, [lockProgram]);
+
+  // Fetch lock classes based on selected lock department
+  useEffect(() => {
+    async function fetchLockClassList() {
+      if (!lockDepartment) {
+        setLockClasses([]);
+        setLockClass(null);
+        return;
+      }
+      try {
+        const res = await apiCall(
+          `/api/classes?departmentId=${lockDepartment.id}`,
+        );
+        const data = await res.json();
+        if (data.success) {
+          setLockClasses(data.classes);
+          setLockClass(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch classes:", error);
+        setLockClasses([]);
+      }
+    }
+    fetchLockClassList();
+  }, [lockDepartment]);
+
+  // Check if current lock date is locked
+  useEffect(() => {
+    async function checkCurrentDateLock() {
+      if (!lockClass || !lockDate) {
+        setIsCurrentDateLocked(false);
+        return;
+      }
+      try {
+        const res = await apiCall(
+          `/api/attendance-lock?classId=${lockClass.id}&date=${lockDate}`,
+        );
+        const data = await res.json();
+        setIsCurrentDateLocked(data.isLocked || false);
+      } catch (error) {
+        console.error("Failed to check lock status:", error);
+        setIsCurrentDateLocked(false);
+      }
+    }
+    checkCurrentDateLock();
+  }, [lockClass, lockDate]);
+
+  // Auto-lock past dates when class is selected
+  useEffect(() => {
+    if (lockClass) {
+      ensurePastDatesLocked(lockClass.id);
+      fetchLockedDates();
+    }
+  }, [lockClass]);
 
   // Get all students by department
   const getStudentsByDepartment = (departmentId) => {
@@ -688,6 +788,104 @@ export default function AdminDashboard({ user, onLogout }) {
     }
   };
 
+  // Attendance Lock Management Functions
+  const toggleAttendanceLock = async () => {
+    if (!lockClass || !lockDate) {
+      alert("Please select both class and date");
+      return;
+    }
+
+    try {
+      const res = await apiCall("/api/attendance-lock", {
+        method: "POST",
+        body: JSON.stringify({
+          classId: lockClass.id,
+          date: lockDate,
+          isLocked: true,
+          reason: lockReason || "Locked by admin",
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Attendance locked successfully!");
+        setLockDate(new Date().toISOString().split("T")[0]);
+        setLockReason("");
+        fetchLockedDates();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to lock attendance: " + error.message);
+    }
+  };
+
+  const unlockAttendance = async (classId, date) => {
+    if (!confirm("Are you sure you want to unlock attendance for this date?")) {
+      return;
+    }
+
+    try {
+      const res = await apiCall("/api/attendance-lock", {
+        method: "POST",
+        body: JSON.stringify({
+          classId,
+          date,
+          isLocked: false,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Attendance unlocked successfully!");
+        // Refresh locked dates list
+        fetchLockedDates();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to unlock attendance: " + error.message);
+    }
+  };
+
+  const fetchLockedDates = async () => {
+    if (!lockClass) {
+      setLockedDates([]);
+      return;
+    }
+
+    try {
+      // Fetch all locked dates for the selected class
+      const res = await apiCall(
+        `/api/attendance-lock?classId=${lockClass.id}&listAll=true`,
+      );
+      const data = await res.json();
+      if (data.success && data.locks) {
+        setLockedDates(data.locks);
+      } else {
+        setLockedDates([]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch locked dates:", error);
+      setLockedDates([]);
+    }
+  };
+
+  const ensurePastDatesLocked = async (classId) => {
+    try {
+      const res = await apiCall("/api/attendance-lock/lock-past-dates", {
+        method: "POST",
+        body: JSON.stringify({
+          classId: classId,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        console.log(`Auto-locked ${data.lockedCount} past dates`);
+      }
+    } catch (error) {
+      console.error("Failed to auto-lock past dates:", error);
+    }
+  };
+
   return (
     <div className="attendance-container">
       <div className="attendance-card">
@@ -719,6 +917,12 @@ export default function AdminDashboard({ user, onLogout }) {
             onClick={() => setActiveTab("report")}
           >
             Absence Report
+          </button>
+          <button
+            className={`nav-btn ${activeTab === "attendance-lock" ? "active" : ""}`}
+            onClick={() => setActiveTab("attendance-lock")}
+          >
+            Attendance Lock
           </button>
         </div>
 
@@ -1406,6 +1610,283 @@ export default function AdminDashboard({ user, onLogout }) {
                 ))
               )}
             </div>
+          </div>
+        )}
+
+        {/* Attendance Lock Tab */}
+        {activeTab === "attendance-lock" && (
+          <div className="admin-section">
+            <h2>Attendance Lock Management</h2>
+
+            {/* Program Selector */}
+            <div style={{ marginBottom: "15px" }}>
+              <label
+                style={{
+                  fontWeight: "bold",
+                  display: "block",
+                  marginBottom: "5px",
+                }}
+              >
+                Select Program:
+              </label>
+              <select
+                value={lockProgram || ""}
+                onChange={(e) => {
+                  setLockProgram(e.target.value);
+                  setLockDepartment(null);
+                  setLockClass(null);
+                }}
+                style={{
+                  padding: "8px",
+                  borderRadius: "4px",
+                  border: "1px solid #ddd",
+                  width: "100%",
+                  maxWidth: "300px",
+                }}
+              >
+                <option value="">-- Select Program --</option>
+                {programs.map((prog) => (
+                  <option key={prog.id} value={prog.name}>
+                    {prog.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Department Selector */}
+            {lockProgram && (
+              <div style={{ marginBottom: "15px" }}>
+                <label
+                  style={{
+                    fontWeight: "bold",
+                    display: "block",
+                    marginBottom: "5px",
+                  }}
+                >
+                  Select Department:
+                </label>
+                <select
+                  value={lockDepartment?.id || ""}
+                  onChange={(e) => {
+                    const dept = lockDepartments.find(
+                      (d) => d.id === parseInt(e.target.value),
+                    );
+                    setLockDepartment(dept || null);
+                    setLockClass(null);
+                  }}
+                  style={{
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #ddd",
+                    width: "100%",
+                    maxWidth: "300px",
+                  }}
+                >
+                  <option value="">-- Select Department --</option>
+                  {lockDepartments.map((dept) => (
+                    <option key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Class Selector */}
+            {lockDepartment && (
+              <div style={{ marginBottom: "15px" }}>
+                <label
+                  style={{
+                    fontWeight: "bold",
+                    display: "block",
+                    marginBottom: "5px",
+                  }}
+                >
+                  Select Class:
+                </label>
+                <select
+                  value={lockClass?.id || ""}
+                  onChange={(e) => {
+                    const cls = lockClasses.find(
+                      (c) => c.id === parseInt(e.target.value),
+                    );
+                    setLockClass(cls || null);
+                  }}
+                  style={{
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #ddd",
+                    width: "100%",
+                    maxWidth: "300px",
+                  }}
+                >
+                  <option value="">-- Select Class --</option>
+                  {lockClasses.map((cls) => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Date Selector and Lock Controls */}
+            {lockClass && (
+              <div style={{ marginBottom: "20px" }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "15px",
+                    marginBottom: "15px",
+                  }}
+                >
+                  {/* Date Input */}
+                  <div>
+                    <label
+                      style={{
+                        fontWeight: "bold",
+                        display: "block",
+                        marginBottom: "5px",
+                      }}
+                    >
+                      Select Date:
+                    </label>
+                    <input
+                      type="date"
+                      value={lockDate}
+                      onChange={(e) => setLockDate(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid #ddd",
+                      }}
+                    />
+                  </div>
+
+                  {/* Reason Input */}
+                  <div>
+                    <label
+                      style={{
+                        fontWeight: "bold",
+                        display: "block",
+                        marginBottom: "5px",
+                      }}
+                    >
+                      Reason (optional):
+                    </label>
+                    <input
+                      type="text"
+                      value={lockReason}
+                      onChange={(e) => setLockReason(e.target.value)}
+                      placeholder="e.g., Holiday, System Issue"
+                      style={{
+                        width: "100%",
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid #ddd",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Lock/Unlock Buttons */}
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "10px",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <button
+                    onClick={() => toggleAttendanceLock()}
+                    disabled={isCurrentDateLocked}
+                    className="export-btn"
+                    style={{
+                      backgroundColor: isCurrentDateLocked
+                        ? "#bdc3c7"
+                        : "#3498db",
+                      cursor: isCurrentDateLocked ? "not-allowed" : "pointer",
+                      opacity: isCurrentDateLocked ? 0.6 : 1,
+                    }}
+                  >
+                    {isCurrentDateLocked ? "✓ Date Locked" : "Lock Attendance"}
+                  </button>
+                  <button
+                    onClick={() => unlockAttendance(lockClass.id, lockDate)}
+                    disabled={!isCurrentDateLocked}
+                    className="export-btn"
+                    style={{
+                      backgroundColor: !isCurrentDateLocked
+                        ? "#bdc3c7"
+                        : "#e74c3c",
+                      cursor: !isCurrentDateLocked ? "not-allowed" : "pointer",
+                      opacity: !isCurrentDateLocked ? 0.6 : 1,
+                    }}
+                  >
+                    {!isCurrentDateLocked
+                      ? "Date Unlocked"
+                      : "Unlock Attendance"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Locked Dates List */}
+            {lockClass && lockedDates.length > 0 && (
+              <div>
+                <h3>Locked Dates for {lockClass.name}</h3>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(auto-fill, minmax(300px, 1fr))",
+                    gap: "10px",
+                  }}
+                >
+                  {lockedDates.map((item, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        border: "1px solid #ddd",
+                        padding: "10px",
+                        borderRadius: "4px",
+                        backgroundColor: "#f9f9f9",
+                      }}
+                    >
+                      <div style={{ marginBottom: "8px" }}>
+                        <strong>Date:</strong> {item.date}
+                      </div>
+                      {item.reason && (
+                        <div style={{ marginBottom: "8px" }}>
+                          <strong>Reason:</strong> {item.reason}
+                        </div>
+                      )}
+                      <div style={{ marginBottom: "8px" }}>
+                        <strong>Locked by:</strong> {item.lockedBy}
+                      </div>
+                      <button
+                        onClick={() =>
+                          unlockAttendance(lockClass.id, item.date)
+                        }
+                        style={{
+                          padding: "6px 12px",
+                          backgroundColor: "#e74c3c",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                        }}
+                      >
+                        Unlock
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

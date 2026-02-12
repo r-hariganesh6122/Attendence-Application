@@ -7,6 +7,7 @@ const importTeachers = require("./importTeachers");
 const importStudents = require("./importStudents");
 const seedAttendance = require("./seedAttendance");
 const seedAttendance20260206 = require("./seedAttendance20260206");
+const hashExistingPasswords = require("./hashExistingPasswords");
 
 async function runAllSeeds() {
   try {
@@ -18,6 +19,7 @@ async function runAllSeeds() {
     await importStudents();
     await seedAttendance();
     await seedAttendance20260206();
+    await hashExistingPasswords();
     console.log("All seeds executed successfully.");
   } catch (error) {
     console.error("Error running seeds:", error);

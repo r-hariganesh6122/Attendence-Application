@@ -10,6 +10,9 @@ async function clearAllData() {
     await prisma.attendance.deleteMany();
     console.log("✓ Cleared attendance records");
 
+    await prisma.attendanceLock.deleteMany();
+    console.log("✓ Cleared attendance locks");
+
     await prisma.student.deleteMany();
     console.log("✓ Cleared students");
 

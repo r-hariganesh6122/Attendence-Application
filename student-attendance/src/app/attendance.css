@@ -509,6 +509,10 @@
     display: none;
   }
 
+  .sno-column {
+    display: none;
+  }
+
   /* Show Roll No format on mobile */
   .desktop-content {
     display: none;

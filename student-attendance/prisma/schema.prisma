@@ -32,6 +32,7 @@ model Class {
   students     Student[]
   classTeachers ClassTeacher[]
   courses      Course[]
+  attendanceLocks AttendanceLock[]
 
   @@unique([name, departmentId])
 }
@@ -57,6 +58,7 @@ model User {
   passwordHash String? // Bcrypt hashed password
   role         String  // 'admin', 'teacher', 'student'
   classTeachers ClassTeacher[]
+  attendanceLocks AttendanceLock[]
 }
 // Join table for teachers assigned to classes with subjects
 model ClassTeacher {
@@ -86,6 +88,22 @@ model Attendance {
 
   @@unique([studentId, date])
 }
+
+model AttendanceLock {
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  classId   Int
+  isLocked  Boolean  @default(false)
+  lockedAt  DateTime?
+  lockedBy  Int?
+  reason    String?
+  
+  class     Class    @relation(fields: [classId], references: [id])
+  lockedByUser User?  @relation(fields: [lockedBy], references: [id])
+
+  @@unique([classId, date])
+}
+
 // Enum for student residence type
 enum ResidenceType {
   H   // Hosteller

@@ -13,6 +13,7 @@ function TeacherDashboard({ user, onLogout }) {
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [currentDepartment, setCurrentDepartment] = useState(null);
+  const [attendanceLocked, setAttendanceLocked] = useState(false);
 
   // Fetch teacher's departments (classes)
   useEffect(() => {
@@ -45,6 +46,7 @@ function TeacherDashboard({ user, onLogout }) {
     if (!selectedDepartmentId) {
       setStudents([]);
       setAttendance({});
+      setAttendanceLocked(false);
       return;
     }
 
@@ -65,6 +67,13 @@ function TeacherDashboard({ user, onLogout }) {
       const attendanceRecords = dataAttendance.success
         ? dataAttendance.attendanceRecords
         : [];
+
+      // Fetch attendance lock status
+      const resLock = await apiCall(
+        `/api/attendance-lock?classId=${selectedDepartmentId}&date=${dateStr}`,
+      );
+      const dataLock = await resLock.json();
+      setAttendanceLocked(dataLock.isLocked || false);
 
       // Pre-fill attendance state
       const initial = {};
@@ -87,6 +96,31 @@ function TeacherDashboard({ user, onLogout }) {
     setSelectedDepartmentId(parseInt(departmentId) || departmentId);
   };
 
+  const isDateInPast = (date) => {
+    const selectedDateOnly = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+    );
+    const todayOnly = new Date();
+    todayOnly.setHours(0, 0, 0, 0);
+    return selectedDateOnly < todayOnly;
+  };
+
+  const isAttendanceEditable = () => {
+    return !isDateInPast(selectedDate) && !attendanceLocked;
+  };
+
+  const getLockedReason = () => {
+    if (attendanceLocked) {
+      return "This attendance is locked by admin";
+    }
+    if (isDateInPast(selectedDate)) {
+      return "This is a previous date. Attendance cannot be modified.";
+    }
+    return null;
+  };
+
   const handleDateChange = (date) => {
     setSelectedDate(date);
     // Reset attendance when date changes
@@ -98,6 +132,10 @@ function TeacherDashboard({ user, onLogout }) {
   };
 
   const handleAbsentChange = (studentId) => {
+    if (!isAttendanceEditable()) {
+      alert(getLockedReason());
+      return;
+    }
     setAttendance((prev) => {
       const newAbsent = !prev[studentId].absent;
       return {
@@ -113,6 +151,10 @@ function TeacherDashboard({ user, onLogout }) {
   };
 
   const handleReasonChange = (studentId, value) => {
+    if (!isAttendanceEditable()) {
+      alert(getLockedReason());
+      return;
+    }
     setAttendance((prev) => ({
       ...prev,
       [studentId]: {
@@ -123,6 +165,10 @@ function TeacherDashboard({ user, onLogout }) {
   };
 
   const handleInformedChange = (studentId) => {
+    if (!isAttendanceEditable()) {
+      alert(getLockedReason());
+      return;
+    }
     setAttendance((prev) => ({
       ...prev,
       [studentId]: {
@@ -133,6 +179,10 @@ function TeacherDashboard({ user, onLogout }) {
   };
 
   const handleSubmit = () => {
+    if (!isAttendanceEditable()) {
+      alert(getLockedReason());
+      return;
+    }
     const attendanceRecord = {
       classId: selectedDepartmentId,
       date: selectedDate.toISOString().split("T")[0],
@@ -229,12 +279,30 @@ function TeacherDashboard({ user, onLogout }) {
             <p>
               <strong>Total Students:</strong> {students.length}
             </p>
+            {!isAttendanceEditable() && (
+              <p
+                style={{
+                  color: "#d32f2f",
+                  fontWeight: "bold",
+                  marginTop: "10px",
+                  padding: "8px",
+                  backgroundColor: "#ffebee",
+                  borderRadius: "4px",
+                }}
+              >
+                ⚠️{" "}
+                {attendanceLocked
+                  ? "This attendance is locked by admin. Attendance cannot be modified."
+                  : "This is a previous date. Attendance cannot be modified."}
+              </p>
+            )}
           </div>
         )}
 
         <table className="attendance-table">
           <thead>
             <tr>
+              <th className="sno-column">S.No</th>
               <th>Roll No</th>
               <th className="name-column">Name</th>
               <th>Absent</th>
@@ -243,8 +311,9 @@ function TeacherDashboard({ user, onLogout }) {
             </tr>
           </thead>
           <tbody>
-            {students.map((student) => (
+            {students.map((student, index) => (
               <tr key={student.id}>
+                <td className="sno-column">{index + 1}</td>
                 <td>
                   <span className="desktop-content">{student.regNo}</span>
                   <span className="mobile-content">{student.regNo % 1000}</span>
@@ -258,6 +327,7 @@ function TeacherDashboard({ user, onLogout }) {
                     checked={attendance[student.id]?.absent || false}
                     onChange={() => handleAbsentChange(student.id)}
                     className="checkbox-input"
+                    disabled={!isAttendanceEditable()}
                   />
                 </td>
                 <td className="checkbox-cell">
@@ -266,7 +336,9 @@ function TeacherDashboard({ user, onLogout }) {
                     checked={attendance[student.id]?.informed || false}
                     onChange={() => handleInformedChange(student.id)}
                     className="checkbox-input"
-                    disabled={!attendance[student.id]?.absent}
+                    disabled={
+                      !attendance[student.id]?.absent || !isAttendanceEditable()
+                    }
                   />
                 </td>
                 <td>
@@ -277,7 +349,9 @@ function TeacherDashboard({ user, onLogout }) {
                     onChange={(e) =>
                       handleReasonChange(student.id, e.target.value)
                     }
-                    disabled={!attendance[student.id]?.absent}
+                    disabled={
+                      !attendance[student.id]?.absent || !isAttendanceEditable()
+                    }
                     className="reason-input"
                   />
                 </td>
@@ -286,7 +360,15 @@ function TeacherDashboard({ user, onLogout }) {
           </tbody>
         </table>
 
-        <button onClick={handleSubmit} className="submit-btn">
+        <button
+          onClick={handleSubmit}
+          className="submit-btn"
+          disabled={!isAttendanceEditable()}
+          style={{
+            opacity: !isAttendanceEditable() ? 0.5 : 1,
+            cursor: !isAttendanceEditable() ? "not-allowed" : "pointer",
+          }}
+        >
           Submit Attendance
         </button>
       </div>
