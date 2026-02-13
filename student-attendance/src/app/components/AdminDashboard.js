@@ -7,6 +7,9 @@ import "../attendance.css";
 export default function AdminDashboard({ user, onLogout }) {
   // State for change password form
   const [changePasswordMobile, setChangePasswordMobile] = useState("");
+  const [changePasswordTeacherInput, setChangePasswordTeacherInput] =
+    useState("");
+  const [showTeacherDropdown, setShowTeacherDropdown] = useState(false);
   const [changePasswordOld, setChangePasswordOld] = useState("");
   const [changePasswordNew, setChangePasswordNew] = useState("");
   const [changePasswordConfirm, setChangePasswordConfirm] = useState("");
@@ -40,7 +43,7 @@ export default function AdminDashboard({ user, onLogout }) {
       const res = await apiCall("/api/teachers", {
         method: "PUT",
         body: JSON.stringify({
-          teacherId: parseInt(changePasswordMobile),
+          mobile: changePasswordMobile,
           oldPassword: changePasswordOld,
           password: changePasswordNew,
         }),
@@ -49,9 +52,11 @@ export default function AdminDashboard({ user, onLogout }) {
       if (data.success) {
         alert("Password changed successfully!");
         setChangePasswordMobile("");
+        setChangePasswordTeacherInput("");
         setChangePasswordOld("");
         setChangePasswordNew("");
         setChangePasswordConfirm("");
+        setShowTeacherDropdown(false);
         fetchTeachers();
       } else {
         alert("Error: " + data.message);
@@ -93,7 +98,7 @@ export default function AdminDashboard({ user, onLogout }) {
   const [selectedTeacherToRemove, setSelectedTeacherToRemove] = useState("");
 
   // Report state
-  const [reportProgram, setReportProgram] = useState("BE");
+  const [reportProgram, setReportProgram] = useState("all");
   const [reportDepartments, setReportDepartments] = useState([]);
   const [reportDate, setReportDate] = useState(
     new Date().toISOString().split("T")[0],
@@ -101,6 +106,7 @@ export default function AdminDashboard({ user, onLogout }) {
   const [reportType, setReportType] = useState("whole"); // 'whole', 'department', 'class'
   const [reportDepartment, setReportDepartment] = useState(null);
   const [reportClass, setReportClass] = useState(null);
+  const [reportResidence, setReportResidence] = useState("all");
   const [reportClasses, setReportClasses] = useState([]);
   const [report, setReport] = useState({});
   const [reportTotalStudents, setReportTotalStudents] = useState({}); // Map of deptId to student count
@@ -109,13 +115,14 @@ export default function AdminDashboard({ user, onLogout }) {
 
   // Attendance Lock Management States
   const [lockManagementTab, setLockManagementTab] = useState("list");
-  const [lockProgram, setLockProgram] = useState(null);
+  const [lockType, setLockType] = useState("whole"); // whole, department, class
+  const [lockProgram, setLockProgram] = useState("all");
   const [lockDepartment, setLockDepartment] = useState(null);
   const [lockClass, setLockClass] = useState(null);
   const [lockDate, setLockDate] = useState(
     new Date().toISOString().split("T")[0],
   );
-  const [lockReason, setLockReason] = useState("");
+
   const [lockedDates, setLockedDates] = useState([]); // List of locked dates for viewing
   const [lockDepartments, setLockDepartments] = useState([]);
   const [lockClasses, setLockClasses] = useState([]);
@@ -320,7 +327,11 @@ export default function AdminDashboard({ user, onLogout }) {
   // Fetch departments for report based on selected program
   useEffect(() => {
     async function fetchReportDepartments() {
-      const res = await apiCall(`/api/departments?program=${reportProgram}`);
+      let url = "/api/departments";
+      if (reportProgram !== "all") {
+        url += `?program=${reportProgram}`;
+      }
+      const res = await apiCall(url);
       const data = await res.json();
       if (data.success) {
         setReportDepartments(data.departments);
@@ -383,6 +394,7 @@ export default function AdminDashboard({ user, onLogout }) {
           reportType,
           reportDepartment,
           reportClass,
+          reportResidence,
         );
         setReport(newReport);
       }
@@ -394,7 +406,7 @@ export default function AdminDashboard({ user, onLogout }) {
     reportType,
     reportDepartment,
     reportClass,
-    reportDepartments,
+    reportResidence,
   ]);
 
   // Fetch locked dates when lock tab or class changes
@@ -414,7 +426,11 @@ export default function AdminDashboard({ user, onLogout }) {
         return;
       }
       try {
-        const res = await apiCall(`/api/departments?program=${lockProgram}`);
+        let url = "/api/departments";
+        if (lockProgram !== "all") {
+          url += `?program=${lockProgram}`;
+        }
+        const res = await apiCall(url);
         const data = await res.json();
         if (data.success) {
           setLockDepartments(data.departments);
@@ -454,16 +470,75 @@ export default function AdminDashboard({ user, onLogout }) {
     fetchLockClassList();
   }, [lockDepartment]);
 
-  // Check if current lock date is locked
+  // Fetch all classes for whole institution lock
   useEffect(() => {
-    async function checkCurrentDateLock() {
-      if (!lockClass || !lockDate) {
-        setIsCurrentDateLocked(false);
+    async function fetchAllClasses() {
+      if (lockType !== "whole") {
         return;
       }
       try {
+        const res = await apiCall("/api/classes");
+        const data = await res.json();
+        if (data.success) {
+          setLockClasses(data.classes);
+        }
+      } catch (error) {
+        console.error("Failed to fetch all classes:", error);
+        setLockClasses([]);
+      }
+    }
+    fetchAllClasses();
+  }, [lockType]);
+
+  // Check if current lock date is locked
+  useEffect(() => {
+    async function checkCurrentDateLock() {
+      if (!lockDate) {
+        setIsCurrentDateLocked(false);
+        return;
+      }
+
+      // For class-level locks, check the specific class
+      if (lockType === "class" && !lockClass) {
+        setIsCurrentDateLocked(false);
+        return;
+      }
+
+      // For department-level locks, check the first class in the department
+      if (lockType === "department" && !lockDepartment) {
+        setIsCurrentDateLocked(false);
+        return;
+      }
+
+      // For whole institution, we need at least one class to check
+      if (lockType === "whole" && lockClasses.length === 0) {
+        setIsCurrentDateLocked(false);
+        return;
+      }
+
+      try {
+        let classIdToCheck = null;
+
+        if (lockType === "class" && lockClass) {
+          classIdToCheck = lockClass.id;
+        } else if (
+          lockType === "department" &&
+          lockDepartment &&
+          lockClasses.length > 0
+        ) {
+          classIdToCheck = lockClasses[0].id;
+        } else if (lockType === "whole" && lockClasses.length > 0) {
+          // For whole institution, check any available class (preferably first)
+          classIdToCheck = lockClasses[0].id;
+        }
+
+        if (!classIdToCheck) {
+          setIsCurrentDateLocked(false);
+          return;
+        }
+
         const res = await apiCall(
-          `/api/attendance-lock?classId=${lockClass.id}&date=${lockDate}`,
+          `/api/attendance-lock?classId=${classIdToCheck}&date=${lockDate}`,
         );
         const data = await res.json();
         setIsCurrentDateLocked(data.isLocked || false);
@@ -473,7 +548,7 @@ export default function AdminDashboard({ user, onLogout }) {
       }
     }
     checkCurrentDateLock();
-  }, [lockClass, lockDate]);
+  }, [lockType, lockClass, lockDepartment, lockDate, lockClasses]);
 
   // Auto-lock past dates when class is selected
   useEffect(() => {
@@ -482,6 +557,28 @@ export default function AdminDashboard({ user, onLogout }) {
       fetchLockedDates();
     }
   }, [lockClass]);
+
+  // Auto-lock past dates for whole institution or department
+  useEffect(() => {
+    async function autoLockForScope() {
+      if (lockType === "whole" && lockClasses.length > 0) {
+        // Auto-lock all classes for whole institution
+        for (const cls of lockClasses) {
+          await ensurePastDatesLocked(cls.id);
+        }
+      } else if (
+        lockType === "department" &&
+        lockDepartment &&
+        lockClasses.length > 0
+      ) {
+        // Auto-lock all classes in department
+        for (const cls of lockClasses) {
+          await ensurePastDatesLocked(cls.id);
+        }
+      }
+    }
+    autoLockForScope();
+  }, [lockType, lockDepartment, lockClasses]);
 
   // Get all students by department
   const getStudentsByDepartment = (departmentId) => {
@@ -499,10 +596,14 @@ export default function AdminDashboard({ user, onLogout }) {
     type = reportType,
     dept = reportDepartment,
     cls = reportClass,
+    residence = reportResidence,
   ) => {
     const report = {};
     const totalStudentsMap = {};
-    const dateStr = new Date(selectedDate).toISOString().split("T")[0];
+    let dateStr = selectedDate;
+    if (selectedDate !== "all") {
+      dateStr = new Date(selectedDate).toISOString().split("T")[0];
+    }
 
     let deptsToProcess = [];
     if (type === "whole") {
@@ -532,10 +633,17 @@ export default function AdminDashboard({ user, onLogout }) {
 
       report[dept.name] = {};
       for (const classItem of classes) {
-        // Fetch attendance for this class for selected date
-        const resAttendance = await apiCall(
-          `/api/attendance?classId=${classItem.id}&from=${dateStr}&to=${dateStr}`,
-        );
+        // Fetch attendance for this class
+        let resAttendance;
+        if (selectedDate === "all") {
+          resAttendance = await apiCall(
+            `/api/attendance?classId=${classItem.id}`,
+          );
+        } else {
+          resAttendance = await apiCall(
+            `/api/attendance?classId=${classItem.id}&from=${dateStr}&to=${dateStr}`,
+          );
+        }
         // Fetch ALL attendance for this class to calculate total leaves
         const resAllAttendance = await apiCall(
           `/api/attendance?classId=${classItem.id}`,
@@ -573,16 +681,23 @@ export default function AdminDashboard({ user, onLogout }) {
           attendanceRecords
             .filter((r) => r.status === "absent")
             .forEach((rec) => {
+              const studentResidence =
+                studentMap[rec.studentId]?.residence || "";
+              // Filter by residence
+              if (residence !== "all" && studentResidence !== residence) {
+                return;
+              }
               absences.push({
                 rollNo: studentMap[rec.studentId]?.rollNo || rec.studentId,
                 name: studentMap[rec.studentId]?.studentName || "",
-                residence: studentMap[rec.studentId]?.residence || "",
+                residence: studentResidence,
                 reason: rec.absenceReason || "",
                 informed: rec.informed || "",
                 leavesTaken: allAttendanceRecords.filter(
                   (r2) =>
                     r2.studentId === rec.studentId && r2.status === "absent",
                 ).length,
+                date: selectedDate === "all" ? rec.date : undefined,
               });
             });
         }
@@ -604,7 +719,10 @@ export default function AdminDashboard({ user, onLogout }) {
   const printReport = async () => {
     try {
       const report = await generateReport();
-      const dateStr = new Date(reportDate).toLocaleDateString();
+      let dateStr =
+        reportDate === "all"
+          ? "All Dates"
+          : new Date(reportDate).toLocaleDateString();
       const reportTypeLabel =
         reportType === "whole"
           ? "All Departments"
@@ -692,6 +810,15 @@ export default function AdminDashboard({ user, onLogout }) {
                 font-size: 13px;
                 margin: 8px 0 0 0;
               }
+              .date-header {
+                background-color: transparent;
+                color: #000;
+                font-size: 20px;
+                font-weight: bold;
+                padding: 12px 12px;
+                margin: 20px 0 12px 0;
+                border-radius: 0;
+              }
               @media print {
                 body { margin: 30px 15px; }
                 table { page-break-inside: auto; margin: 12px 0 8px 0; }
@@ -706,59 +833,350 @@ export default function AdminDashboard({ user, onLogout }) {
             <div class="date">Date: ${dateStr} | Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
       `;
 
-      Object.entries(report).forEach(([deptName, absencesByClass]) => {
-        printContent += `<div class="department-wrapper">`;
-        printContent += `<div class="department-header">${deptName}</div>`;
-        Object.entries(absencesByClass).forEach(([className, absences]) => {
-          printContent += `<div class="class-header">Class: ${className}</div>`;
-          if (absences.length > 0) {
+      if (reportDate === "all") {
+        // For "All Dates" - organize by date first, then departments and classes
+        const reportByDate = {};
+
+        // Reorganize data by date
+        Object.entries(report).forEach(([deptName, absencesByClass]) => {
+          Object.entries(absencesByClass).forEach(([className, absences]) => {
+            absences.forEach((student) => {
+              const dateKey = student.date || "Unknown";
+              if (!reportByDate[dateKey]) {
+                reportByDate[dateKey] = {};
+              }
+              if (!reportByDate[dateKey][deptName]) {
+                reportByDate[dateKey][deptName] = {};
+              }
+              if (!reportByDate[dateKey][deptName][className]) {
+                reportByDate[dateKey][deptName][className] = [];
+              }
+              reportByDate[dateKey][deptName][className].push(student);
+            });
+          });
+        });
+
+        // Sort dates in ascending order
+        const sortedDates = Object.keys(reportByDate).sort();
+        sortedDates.forEach((dateKey, idx) => {
+          const dateDisplay = new Date(dateKey).toLocaleDateString();
+          const pageBreak = idx > 0 ? 'style="page-break-before: always;"' : "";
+          printContent += `<div class="date-header" ${pageBreak}>Date: ${dateDisplay}</div>`;
+
+          const deptsOnDate = reportByDate[dateKey];
+          Object.entries(deptsOnDate).forEach(([deptName, classesOnDate]) => {
+            printContent += `<div class="department-wrapper">`;
+            printContent += `<div class="department-header">${deptName}</div>`;
+            Object.entries(classesOnDate).forEach(([className, absences]) => {
+              printContent += `<div class="class-header">Class: ${className}</div>`;
+              printContent += `
+                <table>
+                  <thead>
+                    <tr>
+                      <th>S No</th>
+                      <th>Roll No</th>
+                      <th>Name</th>
+                      <th>Residence</th>
+                      <th>Absence Reason</th>
+                      <th>Status</th>
+                      <th>Leaves Taken</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+              `;
+              absences.forEach((student, idx) => {
+                let status = "Not Informed";
+                if (typeof student.informed === "string") {
+                  status =
+                    student.informed.toLowerCase() === "informed"
+                      ? "Informed"
+                      : "Not Informed";
+                } else if (student.informed === true) {
+                  status = "Informed";
+                }
+                printContent += `
+                  <tr>
+                    <td>${idx + 1}</td>
+                    <td>${student.rollNo}</td>
+                    <td>${student.name}</td>
+                    <td>${student.residence || ""}</td>
+                    <td>${student.reason || ""}</td>
+                    <td>${status}</td>
+                    <td>${student.leavesTaken || 0}</td>
+                  </tr>
+                `;
+              });
+              printContent += `
+                  </tbody>
+                </table>
+              `;
+            });
+            printContent += `</div>`;
+          });
+
+          // Add summary for this date
+          if (reportType !== "class") {
+            const summaryData = {};
+            let totalAbsencesThisDate = 0;
+
+            Object.entries(deptsOnDate).forEach(([deptName, classesOnDate]) => {
+              let deptTotal = 0;
+              Object.entries(classesOnDate).forEach(([className, absences]) => {
+                const classAbsences = absences.length;
+                if (!summaryData[deptName]) {
+                  summaryData[deptName] = {};
+                }
+                summaryData[deptName][className] = classAbsences;
+                deptTotal += classAbsences;
+                totalAbsencesThisDate += classAbsences;
+              });
+              summaryData[deptName]["__total"] = deptTotal;
+            });
+
             printContent += `
+              <div style="margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
+                <h3 style="margin-top: 0; color: #333;">Summary - ${dateDisplay}</h3>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Department</th>
+                      <th>Class</th>
+                      <th>Number of Absentees</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+            `;
+
+            if (reportType === "whole") {
+              Object.entries(summaryData).forEach(([deptName, classData]) => {
+                const deptTotal = classData["__total"];
+                const classes = Object.entries(classData)
+                  .filter(([key]) => key !== "__total")
+                  .sort();
+
+                classes.forEach(([className, count], idx) => {
+                  printContent += `
+                    <tr>
+                      <td>${idx === 0 ? deptName : ""}</td>
+                      <td>${className}</td>
+                      <td>${count}</td>
+                    </tr>
+                  `;
+                });
+
+                printContent += `
+                  <tr style="background-color: #e8e8e8; font-weight: bold;">
+                    <td>${deptName} Total</td>
+                    <td></td>
+                    <td>${deptTotal}</td>
+                  </tr>
+                `;
+              });
+
+              printContent += `
+                <tr style="background-color: #d0d0d0; font-weight: bold; font-size: 14px;">
+                  <td>Date Total</td>
+                  <td></td>
+                  <td>${totalAbsencesThisDate}</td>
+                </tr>
+              `;
+            } else if (reportType === "department") {
+              Object.entries(summaryData).forEach(([deptName, classData]) => {
+                const deptTotal = classData["__total"];
+                const classes = Object.entries(classData)
+                  .filter(([key]) => key !== "__total")
+                  .sort();
+
+                classes.forEach(([className, count]) => {
+                  printContent += `
+                    <tr>
+                      <td>${deptName}</td>
+                      <td>${className}</td>
+                      <td>${count}</td>
+                    </tr>
+                  `;
+                });
+
+                printContent += `
+                  <tr style="background-color: #e8e8e8; font-weight: bold;">
+                    <td>${deptName} Total</td>
+                    <td></td>
+                    <td>${deptTotal}</td>
+                  </tr>
+                `;
+              });
+            }
+
+            printContent += `
+                  </tbody>
+                </table>
+              </div>
+            `;
+          }
+        });
+      } else {
+        // Original format - by department and class
+        Object.entries(report).forEach(([deptName, absencesByClass]) => {
+          printContent += `<div class="department-wrapper">`;
+          printContent += `<div class="department-header">${deptName}</div>`;
+          Object.entries(absencesByClass).forEach(([className, absences]) => {
+            printContent += `<div class="class-header">Class: ${className}</div>`;
+            if (absences.length > 0) {
+              printContent += `
+                <table>
+                  <thead>
+                    <tr>
+                      <th>S No</th>
+                      <th>Roll No</th>
+                      <th>Name</th>
+                      <th>Residence</th>
+                      <th>Absence Reason</th>
+                      <th>Status</th>
+                      <th>Leaves Taken</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+              `;
+              absences.forEach((student, idx) => {
+                let status = "Not Informed";
+                if (typeof student.informed === "string") {
+                  status =
+                    student.informed.toLowerCase() === "informed"
+                      ? "Informed"
+                      : "Not Informed";
+                } else if (student.informed === true) {
+                  status = "Informed";
+                }
+                printContent += `
+                  <tr>
+                    <td>${idx + 1}</td>
+                    <td>${student.rollNo}</td>
+                    <td>${student.name}</td>
+                    <td>${student.residence || ""}</td>
+                    <td>${student.reason || ""}</td>
+                    <td>${status}</td>
+                    <td>${student.leavesTaken || 0}</td>
+                  </tr>
+                `;
+              });
+              printContent += `
+                  </tbody>
+                </table>
+              `;
+            } else {
+              printContent += `<div class="no-absences">No absences</div>`;
+            }
+          });
+          printContent += `</div>`;
+        });
+
+        // Build single summary page for non-"all dates" selections
+        if (reportType !== "class") {
+          // Calculate absentee counts
+          const summaryData = {};
+          let totalInstitutionAbsences = 0;
+
+          Object.entries(report).forEach(([deptName, absencesByClass]) => {
+            let deptTotal = 0;
+            Object.entries(absencesByClass).forEach(([className, absences]) => {
+              const classAbsences = absences.length;
+              if (!summaryData[deptName]) {
+                summaryData[deptName] = {};
+              }
+              summaryData[deptName][className] = classAbsences;
+              deptTotal += classAbsences;
+              totalInstitutionAbsences += classAbsences;
+            });
+            summaryData[deptName]["__total"] = deptTotal;
+          });
+
+          // Add summary page
+          printContent += `
+            <div class="department-wrapper" style="page-break-before: always;">
+              <div class="department-header">Summary of Absences</div>
               <table>
                 <thead>
                   <tr>
-                    <th>S No</th>
-                    <th>Roll No</th>
-                    <th>Name</th>
-                    <th>Residence</th>
-                    <th>Absence Reason</th>
-                    <th>Status</th>
-                    <th>Leaves Taken</th>
+                    <th>Department</th>
+                    <th>Class</th>
+                    <th>Number of Absentees</th>
                   </tr>
                 </thead>
                 <tbody>
-            `;
-            absences.forEach((student, idx) => {
-              let status = "Not Informed";
-              if (typeof student.informed === "string") {
-                status =
-                  student.informed.toLowerCase() === "informed"
-                    ? "Informed"
-                    : "Not Informed";
-              } else if (student.informed === true) {
-                status = "Informed";
-              }
+          `;
+
+          if (reportType === "whole") {
+            // For whole institution, show all departments, classes, and institution total
+            Object.entries(summaryData).forEach(([deptName, classData]) => {
+              const deptTotal = classData["__total"];
+              const classes = Object.entries(classData)
+                .filter(([key]) => key !== "__total")
+                .sort();
+
+              classes.forEach(([className, count], idx) => {
+                printContent += `
+                  <tr>
+                    <td>${idx === 0 ? deptName : ""}</td>
+                    <td>${className}</td>
+                    <td>${count}</td>
+                  </tr>
+                `;
+              });
+
+              // Add department total row
               printContent += `
-                <tr>
-                  <td>${idx + 1}</td>
-                  <td>${student.rollNo}</td>
-                  <td>${student.name}</td>
-                  <td>${student.residence || ""}</td>
-                  <td>${student.reason || ""}</td>
-                  <td>${status}</td>
-                  <td>${student.leavesTaken || 0}</td>
+                <tr style="background-color: #e8e8e8; font-weight: bold;">
+                  <td>${deptName} Total</td>
+                  <td></td>
+                  <td>${deptTotal}</td>
                 </tr>
               `;
             });
+
+            // Add institution total row
             printContent += `
+              <tr style="background-color: #d0d0d0; font-weight: bold; font-size: 14px;">
+                <td>Institution Total</td>
+                <td></td>
+                <td>${totalInstitutionAbsences}</td>
+              </tr>
+            `;
+          } else if (reportType === "department") {
+            // For department, show classes and department total
+            Object.entries(summaryData).forEach(([deptName, classData]) => {
+              const deptTotal = classData["__total"];
+              const classes = Object.entries(classData)
+                .filter(([key]) => key !== "__total")
+                .sort();
+
+              classes.forEach(([className, count]) => {
+                printContent += `
+                  <tr>
+                    <td>${deptName}</td>
+                    <td>${className}</td>
+                    <td>${count}</td>
+                  </tr>
+                `;
+              });
+
+              // Add department total row
+              printContent += `
+                <tr style="background-color: #e8e8e8; font-weight: bold;">
+                  <td>${deptName} Total</td>
+                  <td></td>
+                  <td>${deptTotal}</td>
+                </tr>
+              `;
+            });
+          }
+
+          printContent += `
                 </tbody>
               </table>
-            `;
-          } else {
-            printContent += `<div class="no-absences">No absences</div>`;
-          }
-        });
-        printContent += `</div>`;
-      });
+            </div>
+          `;
+        }
+      }
 
       printContent += `
           </body>
@@ -790,32 +1208,95 @@ export default function AdminDashboard({ user, onLogout }) {
 
   // Attendance Lock Management Functions
   const toggleAttendanceLock = async () => {
-    if (!lockClass || !lockDate) {
-      alert("Please select both class and date");
+    if (!lockDate) {
+      alert("Please select a date");
+      return;
+    }
+
+    if (lockType === "class" && !lockClass) {
+      alert("Please select a class");
+      return;
+    }
+
+    if (
+      (lockType === "department" || lockType === "class") &&
+      !lockDepartment
+    ) {
+      alert("Please select a department");
       return;
     }
 
     try {
-      const res = await apiCall("/api/attendance-lock", {
+      const res = await apiCall("/api/attendance-lock/bulk-lock", {
         method: "POST",
         body: JSON.stringify({
-          classId: lockClass.id,
+          lockType: lockType, // "whole", "department", or "class"
+          departmentId: lockDepartment?.id || null,
+          classId: lockClass?.id || null,
           date: lockDate,
           isLocked: true,
-          reason: lockReason || "Locked by admin",
         }),
       });
       const data = await res.json();
       if (data.success) {
-        alert("Attendance locked successfully!");
+        alert(
+          `Attendance locked successfully for ${data.lockedCount} class(es)!`,
+        );
         setLockDate(new Date().toISOString().split("T")[0]);
-        setLockReason("");
         fetchLockedDates();
       } else {
         alert("Error: " + data.message);
       }
     } catch (error) {
       alert("Failed to lock attendance: " + error.message);
+    }
+  };
+
+  const toggleAttendanceUnlock = async () => {
+    if (!lockDate) {
+      alert("Please select a date");
+      return;
+    }
+
+    if (lockType === "class" && !lockClass) {
+      alert("Please select a class");
+      return;
+    }
+
+    if (
+      (lockType === "department" || lockType === "class") &&
+      !lockDepartment
+    ) {
+      alert("Please select a department");
+      return;
+    }
+
+    if (!confirm("Are you sure you want to unlock attendance for this date?")) {
+      return;
+    }
+
+    try {
+      const res = await apiCall("/api/attendance-lock/bulk-lock", {
+        method: "POST",
+        body: JSON.stringify({
+          lockType: lockType, // "whole", "department", or "class"
+          departmentId: lockDepartment?.id || null,
+          classId: lockClass?.id || null,
+          date: lockDate,
+          isLocked: false,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(
+          `Attendance unlocked successfully for ${data.lockedCount} class(es)!`,
+        );
+        fetchLockedDates();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to unlock attendance: " + error.message);
     }
   };
 
@@ -847,7 +1328,8 @@ export default function AdminDashboard({ user, onLogout }) {
   };
 
   const fetchLockedDates = async () => {
-    if (!lockClass) {
+    // Only fetch for class-level locks
+    if (lockType !== "class" || !lockClass) {
       setLockedDates([]);
       return;
     }
@@ -1146,14 +1628,88 @@ export default function AdminDashboard({ user, onLogout }) {
               <div className="form-section">
                 <h3>Change Password</h3>
                 <div className="form-grid change-password-grid">
-                  <div className="form-group">
-                    <label>Teacher Mobile Number</label>
+                  <div className="form-group" style={{ position: "relative" }}>
+                    <label>Teacher Name</label>
                     <input
-                      type="tel"
-                      value={changePasswordMobile || ""}
-                      onChange={(e) => setChangePasswordMobile(e.target.value)}
-                      placeholder="Enter teacher mobile number"
+                      type="text"
+                      value={changePasswordTeacherInput || ""}
+                      onChange={(e) => {
+                        setChangePasswordTeacherInput(e.target.value);
+                        setShowTeacherDropdown(true);
+                      }}
+                      onFocus={() => setShowTeacherDropdown(true)}
+                      onBlur={() => {
+                        // Close dropdown after a small delay to allow click selection
+                        setTimeout(() => setShowTeacherDropdown(false), 200);
+                      }}
+                      placeholder="Type teacher name..."
+                      style={{
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid #ddd",
+                        width: "100%",
+                      }}
                     />
+                    {showTeacherDropdown && changePasswordTeacherInput && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "100%",
+                          left: 0,
+                          right: 0,
+                          backgroundColor: "white",
+                          border: "1px solid #ddd",
+                          borderTop: "none",
+                          borderRadius: "0 0 4px 4px",
+                          maxHeight: "200px",
+                          overflowY: "auto",
+                          zIndex: 1000,
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                        }}
+                      >
+                        {teachers
+                          .filter(
+                            (teacher) =>
+                              teacher.name
+                                .toLowerCase()
+                                .includes(
+                                  changePasswordTeacherInput.toLowerCase(),
+                                ) ||
+                              teacher.mobile.includes(
+                                changePasswordTeacherInput,
+                              ),
+                          )
+                          .map((teacher) => (
+                            <div
+                              key={teacher.id}
+                              onClick={() => {
+                                setChangePasswordMobile(teacher.mobile);
+                                setChangePasswordTeacherInput(teacher.name);
+                                setShowTeacherDropdown(false);
+                              }}
+                              style={{
+                                padding: "10px 12px",
+                                cursor: "pointer",
+                                borderBottom: "1px solid #eee",
+                                hover: { backgroundColor: "#f5f5f5" },
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.target.style.backgroundColor = "#f5f5f5")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.target.style.backgroundColor = "white")
+                              }
+                            >
+                              <strong>{teacher.name}</strong>
+                              <span
+                                style={{ marginLeft: "8px", color: "#666" }}
+                              >
+                                ({teacher.mobile})
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                   <div className="form-group">
                     <label>Old Password</label>
@@ -1386,37 +1942,63 @@ export default function AdminDashboard({ user, onLogout }) {
           <div className="admin-section">
             <h2>Absence Report</h2>
 
-            {/* Program Selector */}
-            <div style={{ marginBottom: "15px" }}>
-              <label
-                style={{
-                  fontWeight: "bold",
-                  display: "block",
-                  marginBottom: "5px",
-                }}
-              >
-                Select Program:
-              </label>
-              <select
-                value={reportProgram}
-                onChange={(e) => setReportProgram(e.target.value)}
-                style={{
-                  padding: "8px",
-                  borderRadius: "4px",
-                  border: "1px solid #ddd",
-                  width: "200px",
-                }}
-              >
-                {programs.map((prog) => (
-                  <option key={prog.id} value={prog.name}>
-                    {prog.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             {/* Report Filters */}
             <div className="filter-section" style={{ marginBottom: "20px" }}>
+              {/* Date Picker - First Row */}
+              <div style={{ marginBottom: "15px" }}>
+                <label
+                  style={{
+                    fontWeight: "bold",
+                    display: "block",
+                    marginBottom: "5px",
+                  }}
+                >
+                  Select Date:
+                </label>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "10px",
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <select
+                    value={reportDate === "all" ? "all" : "specific"}
+                    onChange={(e) => {
+                      if (e.target.value === "all") {
+                        setReportDate("all");
+                      } else {
+                        // Switch to specific date - set to today
+                        setReportDate(new Date().toISOString().split("T")[0]);
+                      }
+                    }}
+                    style={{
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                      minWidth: "150px",
+                    }}
+                  >
+                    <option value="all">All Dates</option>
+                    <option value="specific">Specific Date</option>
+                  </select>
+                  {reportDate !== "all" && (
+                    <input
+                      type="date"
+                      value={reportDate}
+                      onChange={(e) => setReportDate(e.target.value)}
+                      style={{
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid #ddd",
+                        width: "180px",
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Other Filters - Grid Layout */}
               <div
                 style={{
                   display: "grid",
@@ -1425,30 +2007,6 @@ export default function AdminDashboard({ user, onLogout }) {
                   marginBottom: "15px",
                 }}
               >
-                {/* Date Picker */}
-                <div>
-                  <label
-                    style={{
-                      fontWeight: "bold",
-                      display: "block",
-                      marginBottom: "5px",
-                    }}
-                  >
-                    Select Date:
-                  </label>
-                  <input
-                    type="date"
-                    value={reportDate}
-                    onChange={(e) => setReportDate(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #ddd",
-                    }}
-                  />
-                </div>
-
                 {/* Report Type */}
                 <div>
                   <label
@@ -1477,6 +2035,36 @@ export default function AdminDashboard({ user, onLogout }) {
                     <option value="whole">Whole Institution</option>
                     <option value="department">By Department</option>
                     <option value="class">By Class</option>
+                  </select>
+                </div>
+
+                {/* Program Selector */}
+                <div>
+                  <label
+                    style={{
+                      fontWeight: "bold",
+                      display: "block",
+                      marginBottom: "5px",
+                    }}
+                  >
+                    Select Program:
+                  </label>
+                  <select
+                    value={reportProgram}
+                    onChange={(e) => setReportProgram(e.target.value)}
+                    style={{
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                      width: "100%",
+                    }}
+                  >
+                    <option value="all">All Programs</option>
+                    {programs.map((prog) => (
+                      <option key={prog.id} value={prog.name}>
+                        {prog.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1558,6 +2146,34 @@ export default function AdminDashboard({ user, onLogout }) {
                     </select>
                   </div>
                 )}
+
+                {/* Residence Filter */}
+                <div>
+                  <label
+                    style={{
+                      fontWeight: "bold",
+                      display: "block",
+                      marginBottom: "5px",
+                    }}
+                  >
+                    Residence:
+                  </label>
+                  <select
+                    value={reportResidence}
+                    onChange={(e) => setReportResidence(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                    }}
+                  >
+                    <option value="all">All</option>
+                    <option value="H">Hosteller (H)</option>
+                    <option value="D">Day Scholar (D)</option>
+                    <option value="OSS">Outside Stayer (OSS)</option>
+                  </select>
+                </div>
               </div>
 
               {/* Print Button */}
@@ -1618,44 +2234,17 @@ export default function AdminDashboard({ user, onLogout }) {
           <div className="admin-section">
             <h2>Attendance Lock Management</h2>
 
-            {/* Program Selector */}
-            <div style={{ marginBottom: "15px" }}>
-              <label
-                style={{
-                  fontWeight: "bold",
-                  display: "block",
-                  marginBottom: "5px",
-                }}
-              >
-                Select Program:
-              </label>
-              <select
-                value={lockProgram || ""}
-                onChange={(e) => {
-                  setLockProgram(e.target.value);
-                  setLockDepartment(null);
-                  setLockClass(null);
-                }}
-                style={{
-                  padding: "8px",
-                  borderRadius: "4px",
-                  border: "1px solid #ddd",
-                  width: "100%",
-                  maxWidth: "300px",
-                }}
-              >
-                <option value="">-- Select Program --</option>
-                {programs.map((prog) => (
-                  <option key={prog.id} value={prog.name}>
-                    {prog.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Department Selector */}
-            {lockProgram && (
-              <div style={{ marginBottom: "15px" }}>
+            {/* Grid Layout for Selectors */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "15px",
+                marginBottom: "20px",
+              }}
+            >
+              {/* Lock Type Selector */}
+              <div>
                 <label
                   style={{
                     fontWeight: "bold",
@@ -1663,15 +2252,13 @@ export default function AdminDashboard({ user, onLogout }) {
                     marginBottom: "5px",
                   }}
                 >
-                  Select Department:
+                  Lock Scope:
                 </label>
                 <select
-                  value={lockDepartment?.id || ""}
+                  value={lockType}
                   onChange={(e) => {
-                    const dept = lockDepartments.find(
-                      (d) => d.id === parseInt(e.target.value),
-                    );
-                    setLockDepartment(dept || null);
+                    setLockType(e.target.value);
+                    setLockDepartment(null);
                     setLockClass(null);
                   }}
                   style={{
@@ -1679,22 +2266,16 @@ export default function AdminDashboard({ user, onLogout }) {
                     borderRadius: "4px",
                     border: "1px solid #ddd",
                     width: "100%",
-                    maxWidth: "300px",
                   }}
                 >
-                  <option value="">-- Select Department --</option>
-                  {lockDepartments.map((dept) => (
-                    <option key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </option>
-                  ))}
+                  <option value="whole">Whole Institution</option>
+                  <option value="department">By Department</option>
+                  <option value="class">By Class</option>
                 </select>
               </div>
-            )}
 
-            {/* Class Selector */}
-            {lockDepartment && (
-              <div style={{ marginBottom: "15px" }}>
+              {/* Program Selector */}
+              <div>
                 <label
                   style={{
                     fontWeight: "bold",
@@ -1702,36 +2283,115 @@ export default function AdminDashboard({ user, onLogout }) {
                     marginBottom: "5px",
                   }}
                 >
-                  Select Class:
+                  Select Program:
                 </label>
                 <select
-                  value={lockClass?.id || ""}
+                  value={lockProgram || "all"}
                   onChange={(e) => {
-                    const cls = lockClasses.find(
-                      (c) => c.id === parseInt(e.target.value),
-                    );
-                    setLockClass(cls || null);
+                    setLockProgram(e.target.value);
+                    setLockDepartment(null);
+                    setLockClass(null);
                   }}
                   style={{
                     padding: "8px",
                     borderRadius: "4px",
                     border: "1px solid #ddd",
                     width: "100%",
-                    maxWidth: "300px",
                   }}
                 >
-                  <option value="">-- Select Class --</option>
-                  {lockClasses.map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.name}
+                  <option value="all">All Programs</option>
+                  {programs.map((prog) => (
+                    <option key={prog.id} value={prog.name}>
+                      {prog.name}
                     </option>
                   ))}
                 </select>
               </div>
-            )}
+
+              {/* Department Selector - shows for department and class types */}
+              {(lockType === "department" || lockType === "class") &&
+                lockProgram && (
+                  <div>
+                    <label
+                      style={{
+                        fontWeight: "bold",
+                        display: "block",
+                        marginBottom: "5px",
+                      }}
+                    >
+                      Select Department:
+                    </label>
+                    <select
+                      value={lockDepartment?.id || ""}
+                      onChange={(e) => {
+                        const dept = lockDepartments.find(
+                          (d) => d.id === parseInt(e.target.value),
+                        );
+                        setLockDepartment(dept || null);
+                        if (lockType === "class") {
+                          setLockClass(null);
+                        }
+                      }}
+                      style={{
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid #ddd",
+                        width: "100%",
+                      }}
+                    >
+                      <option value="">-- Select Department --</option>
+                      {lockDepartments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+              {/* Class Selector - only shows when type is class and department is selected */}
+              {lockType === "class" && lockDepartment && (
+                <div>
+                  <label
+                    style={{
+                      fontWeight: "bold",
+                      display: "block",
+                      marginBottom: "5px",
+                    }}
+                  >
+                    Select Class:
+                  </label>
+                  <select
+                    value={lockClass?.id || ""}
+                    onChange={(e) => {
+                      const cls = lockClasses.find(
+                        (c) => c.id === parseInt(e.target.value),
+                      );
+                      setLockClass(cls || null);
+                    }}
+                    style={{
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                      width: "100%",
+                    }}
+                  >
+                    <option value="">-- Select Class --</option>
+                    {lockClasses.map((cls) => (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
 
             {/* Date Selector and Lock Controls */}
-            {lockClass && (
+            {(lockType === "whole" ||
+              (lockProgram &&
+                ((lockType === "department" && lockDepartment) ||
+                  (lockType === "class" && lockClass)))) && (
               <div style={{ marginBottom: "20px" }}>
                 <div
                   style={{
@@ -1764,31 +2424,6 @@ export default function AdminDashboard({ user, onLogout }) {
                       }}
                     />
                   </div>
-
-                  {/* Reason Input */}
-                  <div>
-                    <label
-                      style={{
-                        fontWeight: "bold",
-                        display: "block",
-                        marginBottom: "5px",
-                      }}
-                    >
-                      Reason (optional):
-                    </label>
-                    <input
-                      type="text"
-                      value={lockReason}
-                      onChange={(e) => setLockReason(e.target.value)}
-                      placeholder="e.g., Holiday, System Issue"
-                      style={{
-                        width: "100%",
-                        padding: "8px",
-                        borderRadius: "4px",
-                        border: "1px solid #ddd",
-                      }}
-                    />
-                  </div>
                 </div>
 
                 {/* Lock/Unlock Buttons */}
@@ -1811,10 +2446,12 @@ export default function AdminDashboard({ user, onLogout }) {
                       opacity: isCurrentDateLocked ? 0.6 : 1,
                     }}
                   >
-                    {isCurrentDateLocked ? "✓ Date Locked" : "Lock Attendance"}
+                    {isCurrentDateLocked
+                      ? `✓ ${lockType === "whole" ? "Institution" : lockType === "department" ? "Department" : "Class"} Locked`
+                      : `Lock ${lockType === "whole" ? "Institution" : lockType === "department" ? "Department" : "Class"}`}
                   </button>
                   <button
-                    onClick={() => unlockAttendance(lockClass.id, lockDate)}
+                    onClick={() => toggleAttendanceUnlock()}
                     disabled={!isCurrentDateLocked}
                     className="export-btn"
                     style={{
@@ -1825,65 +2462,13 @@ export default function AdminDashboard({ user, onLogout }) {
                       opacity: !isCurrentDateLocked ? 0.6 : 1,
                     }}
                   >
-                    {!isCurrentDateLocked
-                      ? "Date Unlocked"
-                      : "Unlock Attendance"}
+                    Unlock{" "}
+                    {lockType === "whole"
+                      ? "Institution"
+                      : lockType === "department"
+                        ? "Department"
+                        : "Class"}
                   </button>
-                </div>
-              </div>
-            )}
-
-            {/* Locked Dates List */}
-            {lockClass && lockedDates.length > 0 && (
-              <div>
-                <h3>Locked Dates for {lockClass.name}</h3>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns:
-                      "repeat(auto-fill, minmax(300px, 1fr))",
-                    gap: "10px",
-                  }}
-                >
-                  {lockedDates.map((item, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        border: "1px solid #ddd",
-                        padding: "10px",
-                        borderRadius: "4px",
-                        backgroundColor: "#f9f9f9",
-                      }}
-                    >
-                      <div style={{ marginBottom: "8px" }}>
-                        <strong>Date:</strong> {item.date}
-                      </div>
-                      {item.reason && (
-                        <div style={{ marginBottom: "8px" }}>
-                          <strong>Reason:</strong> {item.reason}
-                        </div>
-                      )}
-                      <div style={{ marginBottom: "8px" }}>
-                        <strong>Locked by:</strong> {item.lockedBy}
-                      </div>
-                      <button
-                        onClick={() =>
-                          unlockAttendance(lockClass.id, item.date)
-                        }
-                        style={{
-                          padding: "6px 12px",
-                          backgroundColor: "#e74c3c",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "4px",
-                          cursor: "pointer",
-                          fontSize: "14px",
-                        }}
-                      >
-                        Unlock
-                      </button>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}

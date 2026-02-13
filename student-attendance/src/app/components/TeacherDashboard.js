@@ -1,7 +1,5 @@
 "use client";
 import { useState, useEffect } from "react";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
 import { apiCall } from "@/lib/apiUtils";
 
 import "../attendance.css";
@@ -9,7 +7,9 @@ import "../attendance.css";
 function TeacherDashboard({ user, onLogout }) {
   const [departments, setDepartments] = useState([]);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [currentDepartment, setCurrentDepartment] = useState(null);
@@ -59,7 +59,7 @@ function TeacherDashboard({ user, onLogout }) {
       setStudents(dataStudents.success ? dataStudents.students : []);
 
       // Fetch attendance records for selected date
-      const dateStr = selectedDate.toISOString().split("T")[0];
+      const dateStr = selectedDate;
       const resAttendance = await apiCall(
         `/api/attendance?classId=${selectedDepartmentId}&from=${dateStr}&to=${dateStr}`,
       );
@@ -96,12 +96,9 @@ function TeacherDashboard({ user, onLogout }) {
     setSelectedDepartmentId(parseInt(departmentId) || departmentId);
   };
 
-  const isDateInPast = (date) => {
-    const selectedDateOnly = new Date(
-      date.getFullYear(),
-      date.getMonth(),
-      date.getDate(),
-    );
+  const isDateInPast = (dateStr) => {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    const selectedDateOnly = new Date(year, month - 1, day);
     const todayOnly = new Date();
     todayOnly.setHours(0, 0, 0, 0);
     return selectedDateOnly < todayOnly;
@@ -121,8 +118,8 @@ function TeacherDashboard({ user, onLogout }) {
     return null;
   };
 
-  const handleDateChange = (date) => {
-    setSelectedDate(date);
+  const handleDateChange = (e) => {
+    setSelectedDate(e.target.value);
     // Reset attendance when date changes
     const initial = {};
     students.forEach((student) => {
@@ -185,7 +182,7 @@ function TeacherDashboard({ user, onLogout }) {
     }
     const attendanceRecord = {
       classId: selectedDepartmentId,
-      date: selectedDate.toISOString().split("T")[0],
+      date: selectedDate,
       records: students.map((student) => ({
         studentId: student.id,
         absent: attendance[student.id]?.absent || false,
@@ -256,12 +253,18 @@ function TeacherDashboard({ user, onLogout }) {
               <label htmlFor="date-select" className="class-label">
                 Select Date:
               </label>
-              <DatePicker
-                selected={selectedDate}
+              <input
+                type="date"
+                value={selectedDate}
                 onChange={handleDateChange}
-                dateFormat="yyyy-MM-dd"
-                maxDate={new Date()}
-                className="class-select"
+                max={new Date().toISOString().split("T")[0]}
+                style={{
+                  width: "100%",
+                  maxWidth: "250px",
+                  padding: "8px",
+                  borderRadius: "4px",
+                  border: "1px solid #ddd",
+                }}
                 id="date-select"
               />
             </div>

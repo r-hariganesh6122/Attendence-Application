@@ -43,8 +43,8 @@ export default function LoginPage({ onLogin }) {
           setError("");
           // Store JWT token
           setToken(data.token);
-          // Pass user data to onLogin
-          onLogin(data.user);
+          // Pass user data and token to onLogin
+          onLogin(data.user, data.token);
         } else {
           setError(data.message || "Invalid mobile or password");
         }

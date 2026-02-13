@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
+import { apiCall } from "@/lib/apiUtils";
 import "../../attendance.css";
 
 export default function ClassDetailsPage({ params }) {
@@ -47,11 +48,11 @@ export default function ClassDetailsPage({ params }) {
   useEffect(() => {
     async function fetchClassData() {
       // Fetch students
-      const resStudents = await fetch(`/api/students?classId=${id}`);
+      const resStudents = await apiCall(`/api/students?classId=${id}`);
       const dataStudents = await resStudents.json();
       setStudents(dataStudents.success ? dataStudents.students : []);
       // Fetch class-teachers assignments
-      const resTeachers = await fetch(`/api/class-teachers?classId=${id}`);
+      const resTeachers = await apiCall(`/api/class-teachers?classId=${id}`);
       const dataTeachers = await resTeachers.json();
       if (dataTeachers.success) {
         const mappedTeachers = dataTeachers.assignments.map((assignment) => ({
@@ -67,11 +68,11 @@ export default function ClassDetailsPage({ params }) {
         setTeachers(mappedTeachers);
       }
       // Fetch courses
-      const resCourses = await fetch(`/api/courses?classId=${id}`);
+      const resCourses = await apiCall(`/api/courses?classId=${id}`);
       const dataCourses = await resCourses.json();
       setCourses(dataCourses.success ? dataCourses.courses : []);
       // Fetch all teachers
-      const resAllTeachers = await fetch("/api/teachers");
+      const resAllTeachers = await apiCall("/api/teachers");
       const dataAllTeachers = await resAllTeachers.json();
       setAllTeachers(dataAllTeachers.success ? dataAllTeachers.teachers : []);
     }
@@ -80,7 +81,7 @@ export default function ClassDetailsPage({ params }) {
 
   const fetchStudentAttendance = async (studentId) => {
     try {
-      const res = await fetch(`/api/attendance?studentId=${studentId}`);
+      const res = await apiCall(`/api/attendance?studentId=${studentId}`);
       const data = await res.json();
       setAttendanceRecords(data.success ? data.attendance : []);
     } catch (error) {
@@ -92,7 +93,7 @@ export default function ClassDetailsPage({ params }) {
   // Fetch students for selected class
   const fetchStudents = async () => {
     try {
-      const res = await fetch(`/api/students?classId=${id}`);
+      const res = await apiCall(`/api/students?classId=${id}`);
       const data = await res.json();
       setStudents(data.success ? data.students : []);
     } catch (error) {
@@ -103,7 +104,7 @@ export default function ClassDetailsPage({ params }) {
   // Fetch all courses for this class
   const fetchCourses = async () => {
     try {
-      const res = await fetch(`/api/courses?classId=${id}`);
+      const res = await apiCall(`/api/courses?classId=${id}`);
       const data = await res.json();
       setCourses(data.success ? data.courses : []);
     } catch (error) {
@@ -114,7 +115,7 @@ export default function ClassDetailsPage({ params }) {
   // Fetch all teachers in the system
   const fetchAllTeachers = async () => {
     try {
-      const res = await fetch("/api/teachers");
+      const res = await apiCall("/api/teachers");
       const data = await res.json();
       setAllTeachers(data.success ? data.teachers : []);
     } catch (error) {
@@ -134,9 +135,8 @@ export default function ClassDetailsPage({ params }) {
     }
 
     try {
-      const res = await fetch("/api/students", {
+      const res = await apiCall("/api/students", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...newStudent,
           classId: parseInt(id),
@@ -168,7 +168,7 @@ export default function ClassDetailsPage({ params }) {
     }
 
     try {
-      const res = await fetch(`/api/students?studentId=${studentId}`, {
+      const res = await apiCall(`/api/students?studentId=${studentId}`, {
         method: "DELETE",
       });
       const data = await res.json();
@@ -197,10 +197,16 @@ export default function ClassDetailsPage({ params }) {
     }
 
     try {
-      const res = await fetch("/api/students", {
+      const res = await apiCall("/api/students", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editStudent),
+        body: JSON.stringify({
+          studentId: editStudent.id,
+          rollNo: editStudent.rollNo,
+          regNo: editStudent.regNo,
+          studentName: editStudent.studentName,
+          residence: editStudent.residence,
+          classId: editStudent.classId,
+        }),
       });
       const data = await res.json();
 
@@ -225,9 +231,8 @@ export default function ClassDetailsPage({ params }) {
     }
 
     try {
-      const res = await fetch("/api/courses", {
+      const res = await apiCall("/api/courses", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...newCourse,
           classId: parseInt(id),
@@ -255,9 +260,8 @@ export default function ClassDetailsPage({ params }) {
     }
 
     try {
-      const res = await fetch("/api/class-teachers", {
+      const res = await apiCall("/api/class-teachers", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           classId: parseInt(id),
           teacherId: selectedTeacherForCourse.id,
@@ -284,7 +288,7 @@ export default function ClassDetailsPage({ params }) {
   // Fetch Class Teachers
   const fetchClassTeachers = async () => {
     try {
-      const res = await fetch(`/api/class-teachers?classId=${id}`);
+      const res = await apiCall(`/api/class-teachers?classId=${id}`);
       const data = await res.json();
       if (data.success) {
         // Map the assignments to a format the UI can display
@@ -321,9 +325,8 @@ export default function ClassDetailsPage({ params }) {
     }
 
     try {
-      const res = await fetch("/api/courses", {
+      const res = await apiCall("/api/courses", {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courseId: selectedCourseToRemove.id,
           classId: parseInt(id),
@@ -352,9 +355,8 @@ export default function ClassDetailsPage({ params }) {
     }
 
     try {
-      const res = await fetch("/api/class-teachers", {
+      const res = await apiCall("/api/class-teachers", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editClassTeacher),
       });
       const data = await res.json();

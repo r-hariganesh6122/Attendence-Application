@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import LoginPage from "./LoginPage";
 import TeacherDashboard from "./TeacherDashboard";
 import AdminDashboard from "./AdminDashboard";
-import { clearToken } from "@/lib/apiUtils";
+import { clearToken, setToken } from "@/lib/apiUtils";
 
 export default function AppRoot() {
   const [isMounted, setIsMounted] = useState(false);
@@ -15,19 +15,29 @@ export default function AppRoot() {
   useEffect(() => {
     setIsMounted(true);
     const storedUser = localStorage.getItem("user");
-    if (storedUser) {
+    const storedToken = localStorage.getItem("token");
+    if (storedUser && storedToken) {
       try {
         const parsed = JSON.parse(storedUser);
         setUser(parsed);
         setIsLoggedIn(true);
-      } catch {}
+        // Ensure token is set in localStorage (in case it got cleared)
+        setToken(storedToken);
+      } catch (error) {
+        console.error("Failed to restore session:", error);
+        clearToken();
+        localStorage.removeItem("user");
+      }
     }
   }, []);
 
-  const handleLogin = (userData) => {
+  const handleLogin = (userData, token) => {
     setUser(userData);
     setIsLoggedIn(true);
     localStorage.setItem("user", JSON.stringify(userData));
+    if (token) {
+      setToken(token);
+    }
   };
 
   const handleLogout = () => {

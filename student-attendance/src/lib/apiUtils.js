@@ -12,6 +12,8 @@ export async function apiCall(url, options = {}) {
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
+  } else if (typeof window !== "undefined") {
+    console.warn("No token found in localStorage for API call to:", url);
   }
 
   const response = await fetch(url, {
@@ -21,11 +23,12 @@ export async function apiCall(url, options = {}) {
 
   // Log errors for debugging
   if (!response.ok) {
-    console.error(
-      `API Error (${response.status}):`,
-      url,
-      await response.clone().text(),
-    );
+    const errorText = await response.clone().text();
+    console.error(`API Error (${response.status}):`, url, errorText);
+    // Log token status
+    if (!token) {
+      console.error("Token is missing from localStorage");
+    }
   }
 
   return response;

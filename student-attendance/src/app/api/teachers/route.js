@@ -108,19 +108,8 @@ export async function PUT(request) {
 
     // Check if this is a password change request (has oldPassword field)
     if (body.oldPassword) {
-      // Teacher changing their own password
-      const { teacherId: id, oldPassword, password } = body;
-
-      // Verify teacherId matches authenticated user (teachers can only change their own password)
-      if (Number(id) !== user.id) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Forbidden - You can only change your own password",
-          },
-          { status: 403 },
-        );
-      }
+      // Password change request
+      const { mobile, oldPassword, password } = body;
 
       // Validate password field exists
       if (!password || password.length < 6) {
@@ -130,10 +119,10 @@ export async function PUT(request) {
         );
       }
 
-      // Get current teacher's password hash
+      // Find teacher by mobile
       const teacher = await prisma.user.findUnique({
-        where: { id: Number(id) },
-        select: { passwordHash: true, password: true },
+        where: { mobile },
+        select: { id: true, passwordHash: true, password: true },
       });
 
       if (!teacher) {
@@ -159,7 +148,7 @@ export async function PUT(request) {
       // Hash new password and update
       const hashedPassword = await bcrypt.hash(password, 10);
       const updatedTeacher = await prisma.user.update({
-        where: { id: Number(id) },
+        where: { id: teacher.id },
         data: {
           passwordHash: hashedPassword,
           password: password, // Keep plaintext for migration period
