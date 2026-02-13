@@ -119,7 +119,22 @@ function TeacherDashboard({ user, onLogout }) {
   };
 
   const handleDateChange = (e) => {
-    setSelectedDate(e.target.value);
+    const newDate = e.target.value;
+
+    // Validate that the selected date is not in the future
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const [year, month, day] = newDate.split("-").map(Number);
+    const selectedDateObj = new Date(year, month - 1, day);
+
+    if (selectedDateObj > today) {
+      alert(
+        "Future dates are not allowed. Please select today or a past date.",
+      );
+      return;
+    }
+
+    setSelectedDate(newDate);
     // Reset attendance when date changes
     const initial = {};
     students.forEach((student) => {
@@ -166,11 +181,20 @@ function TeacherDashboard({ user, onLogout }) {
       alert(getLockedReason());
       return;
     }
+
+    const newInformed = !attendance[studentId]?.informed;
+
+    // If marking as informed, check if reason is provided
+    if (newInformed && !attendance[studentId]?.reason?.trim()) {
+      alert("Please enter an absence reason before marking as informed.");
+      return;
+    }
+
     setAttendance((prev) => ({
       ...prev,
       [studentId]: {
         ...prev[studentId],
-        informed: !prev[studentId].informed,
+        informed: newInformed,
       },
     }));
   };
@@ -180,6 +204,20 @@ function TeacherDashboard({ user, onLogout }) {
       alert(getLockedReason());
       return;
     }
+
+    // Validate that all informed absences have a reason
+    const missingReasons = students.filter((student) => {
+      const record = attendance[student.id];
+      return record?.absent && record?.informed && !record?.reason?.trim();
+    });
+
+    if (missingReasons.length > 0) {
+      alert(
+        `Please enter absence reasons for the following students who are marked as informed:\n${missingReasons.map((s) => `- ${s.studentName || s.name}`).join("\n")}`,
+      );
+      return;
+    }
+
     const attendanceRecord = {
       classId: selectedDepartmentId,
       date: selectedDate,
@@ -190,6 +228,7 @@ function TeacherDashboard({ user, onLogout }) {
         reason: attendance[student.id]?.reason || "",
       })),
     };
+
     apiCall("/api/attendance", {
       method: "POST",
       body: JSON.stringify(attendanceRecord),
@@ -331,6 +370,11 @@ function TeacherDashboard({ user, onLogout }) {
                     onChange={() => handleAbsentChange(student.id)}
                     className="checkbox-input"
                     disabled={!isAttendanceEditable()}
+                    style={{
+                      cursor: !isAttendanceEditable()
+                        ? "not-allowed"
+                        : "pointer",
+                    }}
                   />
                 </td>
                 <td className="checkbox-cell">
@@ -342,6 +386,13 @@ function TeacherDashboard({ user, onLogout }) {
                     disabled={
                       !attendance[student.id]?.absent || !isAttendanceEditable()
                     }
+                    style={{
+                      cursor:
+                        !attendance[student.id]?.absent ||
+                        !isAttendanceEditable()
+                          ? "not-allowed"
+                          : "pointer",
+                    }}
                   />
                 </td>
                 <td>
@@ -357,6 +408,13 @@ function TeacherDashboard({ user, onLogout }) {
                     }
                     maxLength="40"
                     className="reason-input"
+                    style={{
+                      cursor:
+                        !attendance[student.id]?.absent ||
+                        !isAttendanceEditable()
+                          ? "not-allowed"
+                          : "text",
+                    }}
                   />
                 </td>
               </tr>

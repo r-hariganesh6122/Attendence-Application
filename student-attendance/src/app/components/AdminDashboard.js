@@ -115,6 +115,8 @@ export default function AdminDashboard({ user, onLogout }) {
   const [reportDepartment, setReportDepartment] = useState(null);
   const [reportClass, setReportClass] = useState(null);
   const [reportResidence, setReportResidence] = useState("all");
+  const [reportInformedStatus, setReportInformedStatus] = useState("all");
+
   const [reportClasses, setReportClasses] = useState([]);
   const [report, setReport] = useState({});
   const [reportTotalStudents, setReportTotalStudents] = useState({}); // Map of deptId to student count
@@ -140,6 +142,10 @@ export default function AdminDashboard({ user, onLogout }) {
   const [showSubmissionModal, setShowSubmissionModal] = useState(false);
   const [unsubmittedClasses, setUnsubmittedClasses] = useState([]);
   const [proceedWithPrint, setProceedWithPrint] = useState(false);
+
+  // State for lock confirmation modal
+  const [showLockConfirmModal, setShowLockConfirmModal] = useState(false);
+  const [lockConfirmAction, setLockConfirmAction] = useState(null); // 'print' or 'export'
 
   // Fetch teacher courses when expanding a teacher
   const fetchTeacherCourses = async (teacherId) => {
@@ -411,6 +417,7 @@ export default function AdminDashboard({ user, onLogout }) {
             reportDepartment,
             reportClass,
             reportResidence,
+            reportInformedStatus,
           );
           setReport(newReport);
         } else {
@@ -422,6 +429,7 @@ export default function AdminDashboard({ user, onLogout }) {
             reportDepartment,
             reportClass,
             reportResidence,
+            reportInformedStatus,
           );
           setReport(newReport);
         }
@@ -438,6 +446,7 @@ export default function AdminDashboard({ user, onLogout }) {
     reportDepartment,
     reportClass,
     reportResidence,
+    reportInformedStatus,
   ]);
 
   // Fetch locked dates when lock tab or class changes
@@ -563,7 +572,7 @@ export default function AdminDashboard({ user, onLogout }) {
           classIdToCheck = lockClasses[0].id;
         }
 
-        if (!classIdToCheck) {
+        if (!classIdToCheck || !lockDate) {
           setIsCurrentDateLocked(false);
           return;
         }
@@ -571,6 +580,7 @@ export default function AdminDashboard({ user, onLogout }) {
         const res = await apiCall(
           `/api/attendance-lock?classId=${classIdToCheck}&date=${lockDate}`,
         );
+
         const data = await res.json();
         setIsCurrentDateLocked(data.isLocked || false);
       } catch (error) {
@@ -630,6 +640,7 @@ export default function AdminDashboard({ user, onLogout }) {
     dept = reportDepartment,
     cls = reportClass,
     residence = reportResidence,
+    informedStatus = reportInformedStatus,
   ) => {
     const report = {};
     const totalStudentsMap = {};
@@ -726,6 +737,17 @@ export default function AdminDashboard({ user, onLogout }) {
               if (residence !== "all" && studentResidence !== residence) {
                 return;
               }
+              // Filter by informed status
+              let studentInformed = rec.informed || false;
+              if (informedStatus !== "all") {
+                const isInformed =
+                  typeof studentInformed === "string"
+                    ? studentInformed.toLowerCase() === "informed"
+                    : studentInformed === true;
+                if (informedStatus === "informed" && !isInformed) return;
+                if (informedStatus === "not-informed" && isInformed) return;
+              }
+
               absences.push({
                 rollNo: studentMap[rec.studentId]?.rollNo || rec.studentId,
                 name: studentMap[rec.studentId]?.studentName || "",
@@ -814,6 +836,21 @@ export default function AdminDashboard({ user, onLogout }) {
 
   // Print Absence Report
   const printReport = async () => {
+    try {
+      // Show lock confirmation modal first
+      setLockConfirmAction("print");
+      setShowLockConfirmModal(true);
+    } catch (error) {
+      alert(
+        "Failed to generate report. Please check attendance data and try again.",
+      );
+    }
+  };
+
+  // Handle lock confirmation and proceed with print
+  const handleLockConfirmAndPrint = async () => {
+    setShowLockConfirmModal(false);
+
     try {
       // Check submissions based on date mode
       const dateToCheck =
@@ -1361,6 +1398,20 @@ export default function AdminDashboard({ user, onLogout }) {
 
   // Export Report to Excel
   const exportToExcel = async () => {
+    try {
+      // Show lock confirmation modal first
+      setLockConfirmAction("export");
+      setShowLockConfirmModal(true);
+    } catch (error) {
+      console.error("Export error:", error);
+      alert("Failed to export report to Excel. Please try again.");
+    }
+  };
+
+  // Handle lock confirmation and proceed with export
+  const handleLockConfirmAndExport = async () => {
+    setShowLockConfirmModal(false);
+
     try {
       let report;
       let dateStr;
@@ -2538,6 +2589,33 @@ export default function AdminDashboard({ user, onLogout }) {
                     <option value="OSS">Outside Stayer (OSS)</option>
                   </select>
                 </div>
+
+                {/* Informed Status Filter */}
+                <div>
+                  <label
+                    style={{
+                      fontWeight: "bold",
+                      display: "block",
+                      marginBottom: "5px",
+                    }}
+                  >
+                    Informed Status:
+                  </label>
+                  <select
+                    value={reportInformedStatus}
+                    onChange={(e) => setReportInformedStatus(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                    }}
+                  >
+                    <option value="all">All</option>
+                    <option value="informed">Informed</option>
+                    <option value="not-informed">Not Informed</option>
+                  </select>
+                </div>
               </div>
 
               {/* Print and Export Buttons */}
@@ -2848,6 +2926,142 @@ export default function AdminDashboard({ user, onLogout }) {
           </div>
         )}
       </div>
+
+      {/* Modal for lock confirmation */}
+      {showLockConfirmModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "white",
+              borderRadius: "8px",
+              padding: "30px",
+              maxWidth: "500px",
+              width: "90%",
+              boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+            }}
+          >
+            <h2
+              style={{ marginTop: 0, color: "#3498db", marginBottom: "20px" }}
+            >
+              🔒 Lock Attendance
+            </h2>
+            <p
+              style={{ color: "#666", marginBottom: "20px", fontSize: "14px" }}
+            >
+              Do you want to lock attendance for{" "}
+              <strong>
+                {reportType === "whole"
+                  ? "the Whole Institution"
+                  : reportType === "department"
+                    ? `Department: ${reportDepartment?.name || "Selected Department"}`
+                    : `Class: ${reportClass?.name || "Selected Class"}`}
+              </strong>{" "}
+              before {lockConfirmAction === "print" ? "printing" : "exporting"}{" "}
+              the report?
+            </p>
+            <p
+              style={{ color: "#999", fontSize: "13px", marginBottom: "20px" }}
+            >
+              Locking will prevent further modifications to attendance records
+              for the selected date.
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "10px",
+              }}
+            >
+              <button
+                onClick={() => {
+                  setShowLockConfirmModal(false);
+                  // Proceed without locking
+                  if (lockConfirmAction === "print") {
+                    handleLockConfirmAndPrint();
+                  } else {
+                    handleLockConfirmAndExport();
+                  }
+                }}
+                style={{
+                  padding: "10px 20px",
+                  border: "1px solid #bdc3c7",
+                  borderRadius: "4px",
+                  backgroundColor: "#ecf0f1",
+                  color: "#333",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                }}
+              >
+                Skip & Continue
+              </button>
+              <button
+                onClick={async () => {
+                  // Lock attendance first
+                  const dateToLock =
+                    reportDateMode === "range" ? reportDateFrom : reportDate;
+                  try {
+                    const res = await apiCall(
+                      "/api/attendance-lock/bulk-lock",
+                      {
+                        method: "POST",
+                        body: JSON.stringify({
+                          lockType: reportType,
+                          departmentId: reportDepartment?.id || null,
+                          classId: reportClass?.id || null,
+                          date: dateToLock,
+                          isLocked: true,
+                        }),
+                      },
+                    );
+                    const data = await res.json();
+                    if (data.success) {
+                      alert(
+                        `Attendance locked successfully for ${data.lockedCount} class(es)!`,
+                      );
+                    }
+                  } catch (error) {
+                    console.error("Failed to lock attendance:", error);
+                  }
+
+                  // Then proceed with the action
+                  if (lockConfirmAction === "print") {
+                    handleLockConfirmAndPrint();
+                  } else {
+                    handleLockConfirmAndExport();
+                  }
+                }}
+                style={{
+                  padding: "10px 20px",
+                  border: "none",
+                  borderRadius: "4px",
+                  backgroundColor: "#3498db",
+                  color: "white",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                }}
+              >
+                Lock & Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal for showing unsubmitted classes */}
       {showSubmissionModal && (

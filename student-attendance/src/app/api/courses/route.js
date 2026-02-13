@@ -89,6 +89,77 @@ export async function GET(request) {
   }
 }
 
+// PUT /api/courses
+export async function PUT(request) {
+  try {
+    const body = await request.json();
+    const { courseId, courseCode, subject } = body;
+
+    if (!courseId) {
+      return NextResponse.json(
+        { success: false, message: "courseId is required" },
+        { status: 400 },
+      );
+    }
+
+    if (!courseCode && !subject) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "At least one field (courseCode or subject) must be provided",
+        },
+        { status: 400 },
+      );
+    }
+
+    // Check if course exists
+    const existingCourse = await prisma.course.findUnique({
+      where: { id: Number(courseId) },
+    });
+
+    if (!existingCourse) {
+      return NextResponse.json(
+        { success: false, message: "Course not found" },
+        { status: 404 },
+      );
+    }
+
+    // Update course
+    const updateData = {};
+    if (courseCode) updateData.courseCode = courseCode;
+    if (subject) updateData.subject = subject;
+
+    const course = await prisma.course.update({
+      where: { id: Number(courseId) },
+      data: updateData,
+      select: {
+        id: true,
+        courseCode: true,
+        subject: true,
+        classId: true,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Course updated successfully",
+      course,
+    });
+  } catch (error) {
+    if (error.code === "P2025") {
+      return NextResponse.json(
+        { success: false, message: "Course not found" },
+        { status: 404 },
+      );
+    }
+    return NextResponse.json(
+      { success: false, message: error.message },
+      { status: 500 },
+    );
+  }
+}
+
 // DELETE /api/courses
 export async function DELETE(request) {
   try {

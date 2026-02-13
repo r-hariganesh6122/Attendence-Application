@@ -39,6 +39,19 @@ async function seedAttendance() {
     if (status === "absent") {
       informed = randomInformed();
       absenceReason = randomReason();
+      // Validation: if informed is true, absenceReason must not be null
+      if (informed && !absenceReason) {
+        // Re-select a reason that is not null
+        const nonNullReasons = [
+          "Sick",
+          "Family Emergency",
+          "Personal Work",
+          "Travel",
+          "Other",
+        ];
+        absenceReason =
+          nonNullReasons[Math.floor(Math.random() * nonNullReasons.length)];
+      }
     }
 
     await prisma.attendance.create({

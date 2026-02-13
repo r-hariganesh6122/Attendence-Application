@@ -31,6 +31,9 @@ export default function ClassDetailsPage({ params }) {
   const [modalStudent, setModalStudent] = useState(null);
 
   // Teacher management states
+  const [showTeacherModal, setShowTeacherModal] = useState(false);
+  const [modalTeacher, setModalTeacher] = useState(null);
+
   const [teacherTab, setTeacherTab] = useState("list");
   const [courses, setCourses] = useState([]);
   const [allTeachers, setAllTeachers] = useState([]);
@@ -301,7 +304,107 @@ export default function ClassDetailsPage({ params }) {
     }
   };
 
+  // Open Teacher Modal for editing
+  const openTeacherModal = (teacher) => {
+    setModalTeacher({
+      classTeacherId: teacher.classTeacherId,
+      teacherId: teacher.teacherId,
+      name: teacher.name,
+      mobile: teacher.mobile,
+      courseId: teacher.courseId,
+      courseCode: teacher.courseCode,
+      courseName: teacher.courseName,
+    });
+    setShowTeacherModal(true);
+  };
+
+  // Save Teacher from Modal
+  const saveModalTeacher = async () => {
+    if (!modalTeacher) return;
+
+    try {
+      const res = await apiCall("/api/class-teachers", {
+        method: "PUT",
+        body: JSON.stringify({
+          id: modalTeacher.classTeacherId,
+          teacherId: modalTeacher.teacherId,
+          courseId: modalTeacher.courseId,
+          classId: parseInt(id),
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert("Teacher assignment updated successfully!");
+        setShowTeacherModal(false);
+        setModalTeacher(null);
+        fetchClassTeachers();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to update teacher assignment: " + error.message);
+    }
+  };
+
+  // Delete Teacher from Modal
+  const deleteModalTeacher = async () => {
+    if (!confirm("Are you sure you want to remove this teacher assignment?")) {
+      return;
+    }
+
+    try {
+      const res = await apiCall(
+        `/api/class-teachers?assignmentId=${modalTeacher.classTeacherId}`,
+        {
+          method: "DELETE",
+        },
+      );
+      const data = await res.json();
+
+      if (data.success) {
+        alert("Teacher assignment removed successfully!");
+        setShowTeacherModal(false);
+        setModalTeacher(null);
+        fetchClassTeachers();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to remove teacher assignment: " + error.message);
+    }
+  };
+
+  // Update Course
+  const updateCourse = async (courseId, courseCode, subject) => {
+    try {
+      const res = await apiCall("/api/courses", {
+        method: "PUT",
+        body: JSON.stringify({
+          courseId,
+          courseCode,
+          subject,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert("Course updated successfully!");
+        fetchCourses();
+        fetchClassTeachers();
+        return true;
+      } else {
+        alert("Error: " + data.message);
+        return false;
+      }
+    } catch (error) {
+      alert("Failed to update course: " + error.message);
+      return false;
+    }
+  };
+
   // Add Course
+
   const addCourse = async () => {
     if (!newCourse.courseCode.trim() || !newCourse.subject.trim()) {
       alert("Please fill in all fields");
@@ -1268,7 +1371,9 @@ export default function ClassDetailsPage({ params }) {
                     <div>Course Name</div>
                     <div>Teacher Name</div>
                     <div>Phone Number</div>
+                    <div>Action</div>
                   </div>
+
                   {courses.length === 0 ? (
                     <div className="list-item">
                       No courses available. Add a course first.
@@ -1310,6 +1415,35 @@ export default function ClassDetailsPage({ params }) {
                             <div>{course.subject}</div>
                             <div>{teacher.name}</div>
                             <div>{teacher.mobile}</div>
+                            <div>
+                              <button
+                                onClick={() => openTeacherModal(teacher)}
+                                style={{
+                                  backgroundColor: "#f5f5f5",
+                                  color: "#333",
+                                  border: "1px solid #ddd",
+                                  borderRadius: "4px",
+                                  padding: "6px 10px",
+                                  cursor: "pointer",
+                                  fontSize: "16px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                                title="Edit Teacher Assignment"
+                              >
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 16 16"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                >
+                                  <path d="M2 14l1-4 9-9a2 2 0 0 1 2.8 0 2 2 0 0 1 0 2.8L5.8 13l-3.8 1z" />
+                                </svg>
+                              </button>
+                            </div>
                           </div>
                         ));
                       })
@@ -1687,15 +1821,15 @@ export default function ClassDetailsPage({ params }) {
               {/* Edit Tab */}
               {teacherTab === "editTeacher" && (
                 <div className="form-section">
-                  <h3>Edit Teacher Assignment</h3>
+                  <h3>Edit Course Teachers</h3>
                   {!editClassTeacher ? (
                     <div className="form-group">
-                      <label>Select Teacher to Edit</label>
+                      <label>Select Course to Edit Teachers</label>
                       <input
                         type="text"
                         value={editTeacherSearch}
                         onChange={(e) => setEditTeacherSearch(e.target.value)}
-                        placeholder="Search teacher by name..."
+                        placeholder="Search course by code or name..."
                       />
                       {editTeacherSearch.trim() && (
                         <div
@@ -1707,47 +1841,78 @@ export default function ClassDetailsPage({ params }) {
                             overflowY: "auto",
                           }}
                         >
-                          {teachers
-                            .filter((teacher) =>
-                              teacher.name
+                          {courses
+                            .filter(
+                              (course) =>
+                                course.courseCode
+                                  .toLowerCase()
+                                  .includes(editTeacherSearch.toLowerCase()) ||
+                                course.subject
+                                  .toLowerCase()
+                                  .includes(editTeacherSearch.toLowerCase()),
+                            )
+                            .map((course) => {
+                              const courseTeachers = teachers.filter(
+                                (t) => t.courseId === course.id,
+                              );
+                              return (
+                                <div
+                                  key={course.id}
+                                  onClick={() => {
+                                    setEditClassTeacher({
+                                      courseId: course.id,
+                                      courseCode: course.courseCode,
+                                      courseName: course.subject,
+                                      teachers: courseTeachers,
+                                      newTeacherSearch: "",
+                                      selectedNewTeacher: null,
+                                    });
+                                    setEditTeacherSearch("");
+                                  }}
+                                  style={{
+                                    padding: "10px",
+                                    cursor: "pointer",
+                                    borderBottom: "1px solid #eee",
+                                    backgroundColor: "#fff",
+                                    transition: "background-color 0.2s",
+                                  }}
+                                  onMouseEnter={(e) =>
+                                    (e.target.style.backgroundColor = "#f5f5f5")
+                                  }
+                                  onMouseLeave={(e) =>
+                                    (e.target.style.backgroundColor = "#fff")
+                                  }
+                                >
+                                  {course.courseCode} - {course.subject}
+                                  {courseTeachers.length > 0 && (
+                                    <span
+                                      style={{
+                                        color: "#666",
+                                        fontSize: "12px",
+                                        display: "block",
+                                        marginTop: "4px",
+                                      }}
+                                    >
+                                      Teachers:{" "}
+                                      {courseTeachers
+                                        .map((t) => t.name)
+                                        .join(", ")}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          {courses.filter(
+                            (course) =>
+                              course.courseCode
+                                .toLowerCase()
+                                .includes(editTeacherSearch.toLowerCase()) ||
+                              course.subject
                                 .toLowerCase()
                                 .includes(editTeacherSearch.toLowerCase()),
-                            )
-                            .map((teacher) => (
-                              <div
-                                key={teacher.classTeacherId}
-                                onClick={() => {
-                                  setEditClassTeacher({
-                                    ...teacher,
-                                    id: teacher.classTeacherId,
-                                  });
-                                  setEditTeacherSearch("");
-                                }}
-                                style={{
-                                  padding: "10px",
-                                  cursor: "pointer",
-                                  borderBottom: "1px solid #eee",
-                                  backgroundColor: "#fff",
-                                  transition: "background-color 0.2s",
-                                }}
-                                onMouseEnter={(e) =>
-                                  (e.target.style.backgroundColor = "#f5f5f5")
-                                }
-                                onMouseLeave={(e) =>
-                                  (e.target.style.backgroundColor = "#fff")
-                                }
-                              >
-                                {teacher.name} - {teacher.courseCode} (
-                                {teacher.courseName})
-                              </div>
-                            ))}
-                          {teachers.filter((teacher) =>
-                            teacher.name
-                              .toLowerCase()
-                              .includes(editTeacherSearch.toLowerCase()),
                           ).length === 0 && (
                             <div style={{ padding: "10px", color: "#999" }}>
-                              No teachers found
+                              No courses found
                             </div>
                           )}
                         </div>
@@ -1766,18 +1931,9 @@ export default function ClassDetailsPage({ params }) {
                       >
                         <div>
                           <h4 style={{ margin: "0 0 5px 0" }}>
-                            {editClassTeacher.name}
-                          </h4>
-                          <p
-                            style={{
-                              margin: "0",
-                              fontSize: "14px",
-                              color: "#666",
-                            }}
-                          >
-                            Current Course: {editClassTeacher.courseCode} -{" "}
+                            {editClassTeacher.courseCode} -{" "}
                             {editClassTeacher.courseName}
-                          </p>
+                          </h4>
                         </div>
                         <button
                           onClick={() => {
@@ -1795,19 +1951,186 @@ export default function ClassDetailsPage({ params }) {
                             fontSize: "14px",
                           }}
                         >
-                          Choose Different Teacher
+                          Choose Different Course
                         </button>
                       </div>
 
+                      {/* Edit Course Details Section */}
+                      <h4 style={{ margin: "0 0 15px 0" }}>
+                        Edit Course Details
+                      </h4>
+                      <div className="form-grid">
+                        <div className="form-group">
+                          <label>Course Code</label>
+                          <input
+                            type="text"
+                            value={editClassTeacher.courseCode}
+                            onChange={(e) =>
+                              setEditClassTeacher({
+                                ...editClassTeacher,
+                                courseCode: e.target.value,
+                              })
+                            }
+                            placeholder="Enter course code"
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>Course Name</label>
+                          <input
+                            type="text"
+                            value={editClassTeacher.courseName}
+                            onChange={(e) =>
+                              setEditClassTeacher({
+                                ...editClassTeacher,
+                                courseName: e.target.value,
+                              })
+                            }
+                            placeholder="Enter course name"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          const success = await updateCourse(
+                            editClassTeacher.courseId,
+                            editClassTeacher.courseCode,
+                            editClassTeacher.courseName,
+                          );
+                          if (success) {
+                            setEditClassTeacher({
+                              ...editClassTeacher,
+                              teachers: editClassTeacher.teachers.map((t) => ({
+                                ...t,
+                                courseCode: editClassTeacher.courseCode,
+                                courseName: editClassTeacher.courseName,
+                              })),
+                            });
+                          }
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "10px",
+                          backgroundColor: "#007bff",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                          fontWeight: "bold",
+                          marginTop: "10px",
+                          marginBottom: "20px",
+                        }}
+                      >
+                        Update Course
+                      </button>
+
+                      {/* Current Teachers List with Remove buttons */}
+                      <h4 style={{ margin: "0 0 15px 0" }}>Current Teachers</h4>
+                      {editClassTeacher.teachers &&
+                      editClassTeacher.teachers.length > 0 ? (
+                        <div style={{ marginBottom: "20px" }}>
+                          {editClassTeacher.teachers.map((teacher) => (
+                            <div
+                              key={teacher.classTeacherId}
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                padding: "10px",
+                                backgroundColor: "#f5f5f5",
+                                borderRadius: "4px",
+                                marginBottom: "8px",
+                              }}
+                            >
+                              <div>
+                                <strong>{teacher.name}</strong>
+                                <span
+                                  style={{
+                                    color: "#666",
+                                    fontSize: "14px",
+                                    marginLeft: "8px",
+                                  }}
+                                >
+                                  ({teacher.mobile})
+                                </span>
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  if (
+                                    !confirm(
+                                      `Remove ${teacher.name} from this course?`,
+                                    )
+                                  )
+                                    return;
+                                  try {
+                                    const res = await apiCall(
+                                      `/api/class-teachers?assignmentId=${teacher.classTeacherId}`,
+                                      { method: "DELETE" },
+                                    );
+                                    const data = await res.json();
+                                    if (data.success) {
+                                      alert("Teacher removed successfully!");
+                                      const updatedTeachers =
+                                        editClassTeacher.teachers.filter(
+                                          (t) =>
+                                            t.classTeacherId !==
+                                            teacher.classTeacherId,
+                                        );
+                                      setEditClassTeacher({
+                                        ...editClassTeacher,
+                                        teachers: updatedTeachers,
+                                      });
+                                      fetchClassTeachers();
+                                    } else {
+                                      alert("Error: " + data.message);
+                                    }
+                                  } catch (error) {
+                                    alert(
+                                      "Failed to remove teacher: " +
+                                        error.message,
+                                    );
+                                  }
+                                }}
+                                style={{
+                                  padding: "6px 12px",
+                                  backgroundColor: "#dc3545",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontSize: "12px",
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p style={{ color: "#666", marginBottom: "20px" }}>
+                          No teachers assigned to this course.
+                        </p>
+                      )}
+
+                      {/* Add New Teacher Section */}
+                      <h4 style={{ margin: "20px 0 15px 0" }}>
+                        Add New Teacher
+                      </h4>
                       <div className="form-group">
-                        <label>Select New Course</label>
+                        <label>Search Teacher to Add</label>
                         <input
                           type="text"
-                          value={courseSearch}
-                          onChange={(e) => setCourseSearch(e.target.value)}
-                          placeholder="Search course..."
+                          value={editClassTeacher.newTeacherSearch || ""}
+                          onChange={(e) =>
+                            setEditClassTeacher({
+                              ...editClassTeacher,
+                              newTeacherSearch: e.target.value,
+                              selectedNewTeacher: null,
+                            })
+                          }
+                          placeholder="Search teacher by name or mobile..."
                         />
-                        {courseSearch.trim() && (
+                        {editClassTeacher.newTeacherSearch?.trim() && (
                           <div
                             style={{
                               marginTop: "10px",
@@ -1817,27 +2140,73 @@ export default function ClassDetailsPage({ params }) {
                               overflowY: "auto",
                             }}
                           >
-                            {courses
+                            {allTeachers
                               .filter(
-                                (course) =>
-                                  course.courseCode
+                                (teacher) =>
+                                  !editClassTeacher.teachers?.some(
+                                    (t) => t.teacherId === teacher.id,
+                                  ) &&
+                                  (teacher.name
                                     .toLowerCase()
-                                    .includes(courseSearch.toLowerCase()) ||
-                                  course.subject
-                                    .toLowerCase()
-                                    .includes(courseSearch.toLowerCase()),
+                                    .includes(
+                                      editClassTeacher.newTeacherSearch.toLowerCase(),
+                                    ) ||
+                                    teacher.mobile
+                                      .toLowerCase()
+                                      .includes(
+                                        editClassTeacher.newTeacherSearch.toLowerCase(),
+                                      )),
                               )
-                              .map((course) => (
+                              .map((teacher) => (
                                 <div
-                                  key={course.id}
-                                  onClick={() => {
-                                    setEditClassTeacher({
-                                      ...editClassTeacher,
-                                      courseId: course.id,
-                                      courseCode: course.courseCode,
-                                      courseName: course.subject,
-                                    });
-                                    setCourseSearch("");
+                                  key={teacher.id}
+                                  onClick={async () => {
+                                    try {
+                                      const res = await apiCall(
+                                        "/api/class-teachers",
+                                        {
+                                          method: "POST",
+                                          body: JSON.stringify({
+                                            classId: parseInt(id),
+                                            teacherId: teacher.id,
+                                            courseId: editClassTeacher.courseId,
+                                          }),
+                                        },
+                                      );
+                                      const data = await res.json();
+                                      if (data.success) {
+                                        alert("Teacher added successfully!");
+                                        const newTeacher = {
+                                          classTeacherId: data.assignment.id,
+                                          teacherId: teacher.id,
+                                          name: teacher.name,
+                                          mobile: teacher.mobile,
+                                          courseId: editClassTeacher.courseId,
+                                          courseCode:
+                                            editClassTeacher.courseCode,
+                                          courseName:
+                                            editClassTeacher.courseName,
+                                        };
+                                        setEditClassTeacher({
+                                          ...editClassTeacher,
+                                          teachers: [
+                                            ...(editClassTeacher.teachers ||
+                                              []),
+                                            newTeacher,
+                                          ],
+                                          newTeacherSearch: "",
+                                          selectedNewTeacher: null,
+                                        });
+                                        fetchClassTeachers();
+                                      } else {
+                                        alert("Error: " + data.message);
+                                      }
+                                    } catch (error) {
+                                      alert(
+                                        "Failed to add teacher: " +
+                                          error.message,
+                                      );
+                                    }
                                   }}
                                   style={{
                                     padding: "10px",
@@ -1853,25 +2222,396 @@ export default function ClassDetailsPage({ params }) {
                                     (e.target.style.backgroundColor = "#fff")
                                   }
                                 >
-                                  {course.courseCode} - {course.subject}
+                                  {teacher.name} ({teacher.mobile})
                                 </div>
                               ))}
+                            {allTeachers.filter(
+                              (teacher) =>
+                                !editClassTeacher.teachers?.some(
+                                  (t) => t.teacherId === teacher.id,
+                                ) &&
+                                (teacher.name
+                                  .toLowerCase()
+                                  .includes(
+                                    editClassTeacher.newTeacherSearch.toLowerCase(),
+                                  ) ||
+                                  teacher.mobile
+                                    .toLowerCase()
+                                    .includes(
+                                      editClassTeacher.newTeacherSearch.toLowerCase(),
+                                    )),
+                            ).length === 0 && (
+                              <div style={{ padding: "10px", color: "#999" }}>
+                                No available teachers found
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     </div>
                   )}
-                  <button
-                    onClick={updateTeacherAssignment}
-                    className="add-btn"
-                    disabled={!editClassTeacher}
+                </div>
+              )}
+
+              {/* Teacher Edit Modal */}
+              {showTeacherModal && modalTeacher && (
+                <div
+                  style={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: "rgba(0, 0, 0, 0.5)",
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    zIndex: 1000,
+                  }}
+                  onClick={() => {
+                    setShowTeacherModal(false);
+                    setModalTeacher(null);
+                  }}
+                >
+                  <div
+                    style={{
+                      backgroundColor: "white",
+                      borderRadius: "8px",
+                      padding: "30px",
+                      maxWidth: "500px",
+                      width: "90%",
+                      boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                      maxHeight: "90vh",
+                      overflowY: "auto",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    Update Assignment
-                  </button>
+                    <h3 style={{ marginTop: 0 }}>Edit Course Teachers</h3>
+                    <div
+                      style={{
+                        marginBottom: "20px",
+                        padding: "15px",
+                        backgroundColor: "#e3f2fd",
+                        borderRadius: "4px",
+                        border: "1px solid #2196F3",
+                      }}
+                    >
+                      <h4 style={{ margin: "0 0 5px 0" }}>
+                        {modalTeacher.courseCode} - {modalTeacher.courseName}
+                      </h4>
+                    </div>
+
+                    {/* Current Teachers Section */}
+                    <h4 style={{ margin: "0 0 15px 0" }}>Current Teachers</h4>
+                    {(() => {
+                      const courseTeachers = teachers.filter(
+                        (t) => t.courseId === modalTeacher.courseId,
+                      );
+                      return courseTeachers.length > 0 ? (
+                        <div style={{ marginBottom: "20px" }}>
+                          {courseTeachers.map((teacher) => (
+                            <div
+                              key={teacher.classTeacherId}
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                padding: "10px",
+                                backgroundColor: "#f5f5f5",
+                                borderRadius: "4px",
+                                marginBottom: "8px",
+                              }}
+                            >
+                              <div>
+                                <strong>{teacher.name}</strong>
+                                <span
+                                  style={{
+                                    color: "#666",
+                                    fontSize: "14px",
+                                    marginLeft: "8px",
+                                  }}
+                                >
+                                  ({teacher.mobile})
+                                </span>
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  if (
+                                    !confirm(
+                                      `Remove ${teacher.name} from this course?`,
+                                    )
+                                  )
+                                    return;
+                                  try {
+                                    const res = await apiCall(
+                                      `/api/class-teachers?assignmentId=${teacher.classTeacherId}`,
+                                      { method: "DELETE" },
+                                    );
+                                    const data = await res.json();
+                                    if (data.success) {
+                                      alert("Teacher removed successfully!");
+                                      fetchClassTeachers();
+                                      if (
+                                        teacher.classTeacherId ===
+                                        modalTeacher.classTeacherId
+                                      ) {
+                                        setShowTeacherModal(false);
+                                        setModalTeacher(null);
+                                      }
+                                    } else {
+                                      alert("Error: " + data.message);
+                                    }
+                                  } catch (error) {
+                                    alert(
+                                      "Failed to remove teacher: " +
+                                        error.message,
+                                    );
+                                  }
+                                }}
+                                style={{
+                                  padding: "6px 12px",
+                                  backgroundColor: "#dc3545",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontSize: "12px",
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p style={{ color: "#666", marginBottom: "20px" }}>
+                          No teachers assigned to this course.
+                        </p>
+                      );
+                    })()}
+
+                    {/* Add New Teacher Section */}
+                    <h4 style={{ margin: "20px 0 15px 0" }}>Add New Teacher</h4>
+                    <div className="form-group">
+                      <label>Search Teacher to Add</label>
+                      <input
+                        type="text"
+                        value={modalTeacher.newTeacherSearch || ""}
+                        onChange={(e) =>
+                          setModalTeacher({
+                            ...modalTeacher,
+                            newTeacherSearch: e.target.value,
+                          })
+                        }
+                        placeholder="Search teacher by name or mobile..."
+                      />
+                      {modalTeacher.newTeacherSearch?.trim() && (
+                        <div
+                          style={{
+                            marginTop: "10px",
+                            border: "1px solid #ddd",
+                            borderRadius: "4px",
+                            maxHeight: "200px",
+                            overflowY: "auto",
+                          }}
+                        >
+                          {(() => {
+                            const courseTeachers = teachers.filter(
+                              (t) => t.courseId === modalTeacher.courseId,
+                            );
+                            return allTeachers
+                              .filter(
+                                (teacher) =>
+                                  !courseTeachers.some(
+                                    (t) => t.teacherId === teacher.id,
+                                  ) &&
+                                  (teacher.name
+                                    .toLowerCase()
+                                    .includes(
+                                      modalTeacher.newTeacherSearch.toLowerCase(),
+                                    ) ||
+                                    teacher.mobile
+                                      .toLowerCase()
+                                      .includes(
+                                        modalTeacher.newTeacherSearch.toLowerCase(),
+                                      )),
+                              )
+                              .map((teacher) => (
+                                <div
+                                  key={teacher.id}
+                                  onClick={async () => {
+                                    try {
+                                      const res = await apiCall(
+                                        "/api/class-teachers",
+                                        {
+                                          method: "POST",
+                                          body: JSON.stringify({
+                                            classId: parseInt(id),
+                                            teacherId: teacher.id,
+                                            courseId: modalTeacher.courseId,
+                                          }),
+                                        },
+                                      );
+                                      const data = await res.json();
+                                      if (data.success) {
+                                        alert("Teacher added successfully!");
+                                        setModalTeacher({
+                                          ...modalTeacher,
+                                          newTeacherSearch: "",
+                                        });
+                                        fetchClassTeachers();
+                                      } else {
+                                        alert("Error: " + data.message);
+                                      }
+                                    } catch (error) {
+                                      alert(
+                                        "Failed to add teacher: " +
+                                          error.message,
+                                      );
+                                    }
+                                  }}
+                                  style={{
+                                    padding: "10px",
+                                    cursor: "pointer",
+                                    borderBottom: "1px solid #eee",
+                                    backgroundColor: "#fff",
+                                    transition: "background-color 0.2s",
+                                  }}
+                                  onMouseEnter={(e) =>
+                                    (e.target.style.backgroundColor = "#f5f5f5")
+                                  }
+                                  onMouseLeave={(e) =>
+                                    (e.target.style.backgroundColor = "#fff")
+                                  }
+                                >
+                                  {teacher.name} ({teacher.mobile})
+                                </div>
+                              ));
+                          })()}
+                          {(() => {
+                            const courseTeachers = teachers.filter(
+                              (t) => t.courseId === modalTeacher.courseId,
+                            );
+                            return (
+                              allTeachers.filter(
+                                (teacher) =>
+                                  !courseTeachers.some(
+                                    (t) => t.teacherId === teacher.id,
+                                  ) &&
+                                  (teacher.name
+                                    .toLowerCase()
+                                    .includes(
+                                      modalTeacher.newTeacherSearch.toLowerCase(),
+                                    ) ||
+                                    teacher.mobile
+                                      .toLowerCase()
+                                      .includes(
+                                        modalTeacher.newTeacherSearch.toLowerCase(),
+                                      )),
+                              ).length === 0 && (
+                                <div style={{ padding: "10px", color: "#999" }}>
+                                  No available teachers found
+                                </div>
+                              )
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+
+                    <hr style={{ margin: "20px 0", borderColor: "#ddd" }} />
+
+                    <h4 style={{ margin: "0 0 15px 0" }}>
+                      Edit Course Details
+                    </h4>
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label>Course Code</label>
+                        <input
+                          type="text"
+                          value={modalTeacher.courseCode}
+                          onChange={(e) =>
+                            setModalTeacher({
+                              ...modalTeacher,
+                              courseCode: e.target.value,
+                            })
+                          }
+                          placeholder="Enter course code"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Course Name</label>
+                        <input
+                          type="text"
+                          value={modalTeacher.courseName}
+                          onChange={(e) =>
+                            setModalTeacher({
+                              ...modalTeacher,
+                              courseName: e.target.value,
+                            })
+                          }
+                          placeholder="Enter course name"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() =>
+                        updateCourse(
+                          modalTeacher.courseId,
+                          modalTeacher.courseCode,
+                          modalTeacher.courseName,
+                        )
+                      }
+                      style={{
+                        width: "100%",
+                        padding: "10px",
+                        backgroundColor: "#007bff",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        fontWeight: "bold",
+                        marginTop: "10px",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      Update Course
+                    </button>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        marginTop: "20px",
+                      }}
+                    >
+                      <button
+                        onClick={() => {
+                          setShowTeacherModal(false);
+                          setModalTeacher(null);
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: "10px",
+                          backgroundColor: "#6c757d",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
           )}
+
           {tab === "attendance" && (
             <div style={{ width: "100%" }}>
               {/* Student Search Section */}
