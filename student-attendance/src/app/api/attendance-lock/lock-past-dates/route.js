@@ -15,6 +15,19 @@ export async function POST(request) {
       );
     }
 
+    // Verify user exists in database and get their ID
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { id: true },
+    });
+
+    if (!dbUser) {
+      return NextResponse.json(
+        { success: false, message: "User not found" },
+        { status: 404 },
+      );
+    }
+
     const body = await request.json();
     const { classId } = body;
 
@@ -63,7 +76,7 @@ export async function POST(request) {
           update: {
             isLocked: true,
             lockedAt: new Date(),
-            lockedBy: user.id,
+            lockedBy: dbUser.id,
             reason: "Auto-locked (previous date)",
           },
           create: {
@@ -71,7 +84,7 @@ export async function POST(request) {
             date: dateForDB,
             isLocked: true,
             lockedAt: new Date(),
-            lockedBy: user.id,
+            lockedBy: dbUser.id,
             reason: "Auto-locked (previous date)",
           },
         });
