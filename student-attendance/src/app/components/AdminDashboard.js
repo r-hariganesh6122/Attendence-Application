@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { apiCall } from "@/lib/apiUtils";
+import * as XLSX from "xlsx";
 import "../attendance.css";
 
 export default function AdminDashboard({ user, onLogout }) {
@@ -100,9 +101,16 @@ export default function AdminDashboard({ user, onLogout }) {
   // Report state
   const [reportProgram, setReportProgram] = useState("all");
   const [reportDepartments, setReportDepartments] = useState([]);
+  const [reportDateMode, setReportDateMode] = useState("range"); // "range" or "specific"
   const [reportDate, setReportDate] = useState(
     new Date().toISOString().split("T")[0],
   );
+  const [reportDateFrom, setReportDateFrom] = useState(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+  ); // 30 days ago
+  const [reportDateTo, setReportDateTo] = useState(
+    new Date().toISOString().split("T")[0],
+  ); // Today
   const [reportType, setReportType] = useState("whole"); // 'whole', 'department', 'class'
   const [reportDepartment, setReportDepartment] = useState(null);
   const [reportClass, setReportClass] = useState(null);
@@ -127,6 +135,11 @@ export default function AdminDashboard({ user, onLogout }) {
   const [lockDepartments, setLockDepartments] = useState([]);
   const [lockClasses, setLockClasses] = useState([]);
   const [isCurrentDateLocked, setIsCurrentDateLocked] = useState(false);
+
+  // State for attendance submission check
+  const [showSubmissionModal, setShowSubmissionModal] = useState(false);
+  const [unsubmittedClasses, setUnsubmittedClasses] = useState([]);
+  const [proceedWithPrint, setProceedWithPrint] = useState(false);
 
   // Fetch teacher courses when expanding a teacher
   const fetchTeacherCourses = async (teacherId) => {
@@ -389,20 +402,38 @@ export default function AdminDashboard({ user, onLogout }) {
   useEffect(() => {
     async function updateReportPreview() {
       if (activeTab === "report") {
-        const newReport = await generateReport(
-          reportDate,
-          reportType,
-          reportDepartment,
-          reportClass,
-          reportResidence,
-        );
-        setReport(newReport);
+        if (reportDateMode === "range") {
+          const newReport = await generateReport(
+            null,
+            reportDateFrom,
+            reportDateTo,
+            reportType,
+            reportDepartment,
+            reportClass,
+            reportResidence,
+          );
+          setReport(newReport);
+        } else {
+          const newReport = await generateReport(
+            reportDate,
+            null,
+            null,
+            reportType,
+            reportDepartment,
+            reportClass,
+            reportResidence,
+          );
+          setReport(newReport);
+        }
       }
     }
     updateReportPreview();
   }, [
     activeTab,
+    reportDateMode,
     reportDate,
+    reportDateFrom,
+    reportDateTo,
     reportType,
     reportDepartment,
     reportClass,
@@ -593,6 +624,8 @@ export default function AdminDashboard({ user, onLogout }) {
   // Generate Attendance Report (async)
   const generateReport = async (
     selectedDate = reportDate,
+    dateFrom = reportDateFrom,
+    dateTo = reportDateTo,
     type = reportType,
     dept = reportDepartment,
     cls = reportClass,
@@ -601,7 +634,13 @@ export default function AdminDashboard({ user, onLogout }) {
     const report = {};
     const totalStudentsMap = {};
     let dateStr = selectedDate;
-    if (selectedDate !== "all") {
+    let fromStr = dateFrom;
+    let toStr = dateTo;
+
+    // Determine if using date range or single date
+    const isDateRange = selectedDate === null || selectedDate === undefined;
+
+    if (!isDateRange) {
       dateStr = new Date(selectedDate).toISOString().split("T")[0];
     }
 
@@ -635,9 +674,9 @@ export default function AdminDashboard({ user, onLogout }) {
       for (const classItem of classes) {
         // Fetch attendance for this class
         let resAttendance;
-        if (selectedDate === "all") {
+        if (isDateRange) {
           resAttendance = await apiCall(
-            `/api/attendance?classId=${classItem.id}`,
+            `/api/attendance?classId=${classItem.id}&from=${fromStr}&to=${toStr}`,
           );
         } else {
           resAttendance = await apiCall(
@@ -697,7 +736,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   (r2) =>
                     r2.studentId === rec.studentId && r2.status === "absent",
                 ).length,
-                date: selectedDate === "all" ? rec.date : undefined,
+                date: isDateRange ? rec.date : undefined,
               });
             });
         }
@@ -715,14 +754,102 @@ export default function AdminDashboard({ user, onLogout }) {
     return report;
   };
 
+  // Check which classes have not submitted attendance for the selected date
+  const checkAttendanceSubmissions = async (dateToCheck) => {
+    try {
+      const unsubmitted = [];
+      let classesToCheck = [];
+
+      // Determine classes to check based on report type
+      if (reportType === "whole") {
+        classesToCheck = reportClasses;
+      } else if (reportType === "department" && reportDepartment) {
+        classesToCheck = reportClasses.filter(
+          (c) => c.departmentId === reportDepartment.id,
+        );
+      } else if (reportType === "class" && reportClass) {
+        classesToCheck = [reportClass];
+      }
+
+      // Check each class for attendance records on the selected date
+      for (const classItem of classesToCheck) {
+        try {
+          const dateStr = new Date(dateToCheck).toISOString().split("T")[0];
+          const res = await apiCall(
+            `/api/attendance?classId=${classItem.id}&from=${dateStr}&to=${dateStr}`,
+          );
+          const data = await res.json();
+
+          // If no attendance records found, class has not submitted
+          if (
+            !data.success ||
+            !data.attendanceRecords ||
+            data.attendanceRecords.length === 0
+          ) {
+            unsubmitted.push({
+              id: classItem.id,
+              name: classItem.name,
+              departmentId: classItem.departmentId,
+            });
+          }
+        } catch (error) {
+          console.error(
+            `Failed to check attendance for class ${classItem.id}:`,
+            error,
+          );
+          unsubmitted.push({
+            id: classItem.id,
+            name: classItem.name,
+            departmentId: classItem.departmentId,
+          });
+        }
+      }
+
+      return unsubmitted;
+    } catch (error) {
+      console.error("Failed to check attendance submissions:", error);
+      return [];
+    }
+  };
+
   // Print Absence Report
   const printReport = async () => {
     try {
-      const report = await generateReport();
-      let dateStr =
-        reportDate === "all"
-          ? "All Dates"
-          : new Date(reportDate).toLocaleDateString();
+      // Check submissions based on date mode
+      const dateToCheck =
+        reportDateMode === "range" ? reportDateFrom : reportDate;
+      const unsubmitted = await checkAttendanceSubmissions(dateToCheck);
+
+      if (unsubmitted.length > 0) {
+        setUnsubmittedClasses(unsubmitted);
+        setShowSubmissionModal(true);
+        setProceedWithPrint(false);
+        return;
+      }
+
+      // Proceed with report generation and printing
+      await performPrintReport();
+    } catch (error) {
+      alert(
+        "Failed to generate report. Please check attendance data and try again.",
+      );
+    }
+  };
+
+  // Perform actual report printing (separated to be called after modal confirmation)
+  const performPrintReport = async () => {
+    try {
+      let report;
+      let dateStr;
+
+      if (reportDateMode === "range") {
+        report = await generateReport(null, reportDateFrom, reportDateTo);
+        dateStr = `${new Date(reportDateFrom).toLocaleDateString()} to ${new Date(reportDateTo).toLocaleDateString()}`;
+      } else {
+        report = await generateReport(reportDate, null, null);
+        dateStr = new Date(reportDate).toLocaleDateString();
+      }
+
       const reportTypeLabel =
         reportType === "whole"
           ? "All Departments"
@@ -833,15 +960,27 @@ export default function AdminDashboard({ user, onLogout }) {
             <div class="date">Date: ${dateStr} | Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
       `;
 
-      if (reportDate === "all") {
-        // For "All Dates" - organize by date first, then departments and classes
+      if (reportDateMode === "range") {
+        // For date range - organize by date first, then departments and classes
         const reportByDate = {};
 
         // Reorganize data by date
         Object.entries(report).forEach(([deptName, absencesByClass]) => {
           Object.entries(absencesByClass).forEach(([className, absences]) => {
             absences.forEach((student) => {
-              const dateKey = student.date || "Unknown";
+              // Extract just the date part (YYYY-MM-DD format)
+              let dateKey = "Unknown";
+              if (student.date) {
+                try {
+                  // If it's an ISO string, extract the date part
+                  const datePart = student.date.includes("T")
+                    ? student.date.split("T")[0]
+                    : student.date;
+                  dateKey = datePart;
+                } catch (e) {
+                  console.error("Date parsing error:", e);
+                }
+              }
               if (!reportByDate[dateKey]) {
                 reportByDate[dateKey] = {};
               }
@@ -859,7 +998,21 @@ export default function AdminDashboard({ user, onLogout }) {
         // Sort dates in ascending order
         const sortedDates = Object.keys(reportByDate).sort();
         sortedDates.forEach((dateKey, idx) => {
-          const dateDisplay = new Date(dateKey).toLocaleDateString();
+          // Parse date - dateKey should be in YYYY-MM-DD format
+          let dateDisplay = dateKey;
+          if (dateKey !== "Unknown") {
+            try {
+              // Parse YYYY-MM-DD format and format as DD-MM-YYYY
+              const date = new Date(dateKey + "T00:00:00Z");
+              const day = String(date.getUTCDate()).padStart(2, "0");
+              const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+              const year = date.getUTCFullYear();
+              dateDisplay = `${day}-${month}-${year}`;
+            } catch (e) {
+              console.error("Date display error:", e);
+              dateDisplay = dateKey;
+            }
+          }
           const pageBreak = idx > 0 ? 'style="page-break-before: always;"' : "";
           printContent += `<div class="date-header" ${pageBreak}>Date: ${dateDisplay}</div>`;
 
@@ -1015,7 +1168,7 @@ export default function AdminDashboard({ user, onLogout }) {
           }
         });
       } else {
-        // Original format - by department and class
+        // For specific date - organize by department and class
         Object.entries(report).forEach(([deptName, absencesByClass]) => {
           printContent += `<div class="department-wrapper">`;
           printContent += `<div class="department-header">${deptName}</div>`;
@@ -1070,7 +1223,7 @@ export default function AdminDashboard({ user, onLogout }) {
           printContent += `</div>`;
         });
 
-        // Build single summary page for non-"all dates" selections
+        // Build summary page for specific date
         if (reportType !== "class") {
           // Calculate absentee counts
           const summaryData = {};
@@ -1203,6 +1356,166 @@ export default function AdminDashboard({ user, onLogout }) {
       alert(
         "Failed to generate report. Please check attendance data and try again.",
       );
+    }
+  };
+
+  // Export Report to Excel
+  const exportToExcel = async () => {
+    try {
+      let report;
+      let dateStr;
+
+      if (reportDateMode === "range") {
+        report = await generateReport(null, reportDateFrom, reportDateTo);
+        dateStr = `${new Date(reportDateFrom).toISOString().split("T")[0]}_to_${new Date(reportDateTo).toISOString().split("T")[0]}`;
+      } else {
+        report = await generateReport(reportDate, null, null);
+        dateStr = new Date(reportDate).toISOString().split("T")[0];
+      }
+
+      const workbook = XLSX.utils.book_new();
+      const worksheets = {};
+
+      // Create worksheets for each department
+      Object.entries(report).forEach(([deptName, classesByName]) => {
+        const rows = [];
+
+        // Add header
+        rows.push([
+          "Department",
+          deptName,
+          "",
+          "",
+          "",
+          "",
+          new Date().toLocaleDateString(),
+        ]);
+        rows.push([]); // Empty row
+
+        // Add class data
+        Object.entries(classesByName).forEach(([className, absences]) => {
+          rows.push([`Class: ${className}`, "", "", "", "", "", ""]);
+          rows.push([
+            "S No",
+            "Roll No",
+            "Name",
+            "Residence",
+            "Absence Reason",
+            "Status",
+            "Leaves Taken",
+          ]);
+
+          if (absences.length > 0) {
+            absences.forEach((student, idx) => {
+              let status = "Not Informed";
+              if (typeof student.informed === "string") {
+                status =
+                  student.informed.toLowerCase() === "informed"
+                    ? "Informed"
+                    : "Not Informed";
+              } else if (student.informed === true) {
+                status = "Informed";
+              }
+
+              rows.push([
+                idx + 1,
+                student.rollNo,
+                student.name,
+                student.residence || "",
+                student.reason || "",
+                status,
+                student.leavesTaken || 0,
+              ]);
+            });
+          } else {
+            rows.push(["", "", "No absences", "", "", "", ""]);
+          }
+
+          rows.push([]); // Empty row between classes
+        });
+
+        // Create worksheet from rows
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+
+        // Set column widths
+        ws["!cols"] = [
+          { wch: 8 },
+          { wch: 12 },
+          { wch: 20 },
+          { wch: 12 },
+          { wch: 20 },
+          { wch: 12 },
+          { wch: 12 },
+        ];
+
+        // Use sanitized department name for sheet name (Excel has limitations)
+        const sheetName = deptName
+          .substring(0, 31)
+          .replace(/[\/\\?*\[\]]/g, "");
+        worksheets[sheetName] = ws;
+      });
+
+      // Add all worksheets to workbook
+      Object.entries(worksheets).forEach(([sheetName, ws]) => {
+        XLSX.utils.book_append_sheet(workbook, ws, sheetName);
+      });
+
+      // Add summary sheet
+      const summaryRows = [["Absence Report Summary"]];
+      summaryRows.push(["Generated on", new Date().toLocaleString()]);
+      summaryRows.push(["Report Date", dateStr]);
+      summaryRows.push(["Report Type", reportType]);
+      summaryRows.push([]);
+
+      // Calculate summary data
+      const summaryData = {};
+      let totalAbsences = 0;
+      Object.entries(report).forEach(([deptName, classesByName]) => {
+        let deptTotal = 0;
+        Object.entries(classesByName).forEach(([className, absences]) => {
+          const classAbsences = absences.length;
+          if (!summaryData[deptName]) {
+            summaryData[deptName] = {};
+          }
+          summaryData[deptName][className] = classAbsences;
+          deptTotal += classAbsences;
+          totalAbsences += classAbsences;
+        });
+        summaryData[deptName]["__total"] = deptTotal;
+      });
+
+      summaryRows.push(["Department", "Class", "Number of Absentees"]);
+      Object.entries(summaryData).forEach(([deptName, classData]) => {
+        const deptTotal = classData["__total"];
+        const classes = Object.entries(classData)
+          .filter(([key]) => key !== "__total")
+          .sort();
+
+        classes.forEach(([className, count], idx) => {
+          if (idx === 0) {
+            summaryRows.push([deptName, className, count]);
+          } else {
+            summaryRows.push(["", className, count]);
+          }
+        });
+        summaryRows.push([`${deptName} Total`, "", deptTotal]);
+        summaryRows.push([]);
+      });
+
+      summaryRows.push(["Institution Total", "", totalAbsences]);
+
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
+      summaryWs["!cols"] = [{ wch: 20 }, { wch: 20 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary");
+
+      // Write file
+      XLSX.writeFile(
+        workbook,
+        `Attendance-Report-${dateStr}-${new Date().getTime()}.xlsx`,
+      );
+    } catch (error) {
+      console.error("Export error:", error);
+      alert("Failed to export report to Excel. Please try again.");
     }
   };
 
@@ -1963,15 +2276,8 @@ export default function AdminDashboard({ user, onLogout }) {
                   }}
                 >
                   <select
-                    value={reportDate === "all" ? "all" : "specific"}
-                    onChange={(e) => {
-                      if (e.target.value === "all") {
-                        setReportDate("all");
-                      } else {
-                        // Switch to specific date - set to today
-                        setReportDate(new Date().toISOString().split("T")[0]);
-                      }
-                    }}
+                    value={reportDateMode}
+                    onChange={(e) => setReportDateMode(e.target.value)}
                     style={{
                       padding: "8px",
                       borderRadius: "4px",
@@ -1979,10 +2285,68 @@ export default function AdminDashboard({ user, onLogout }) {
                       minWidth: "150px",
                     }}
                   >
-                    <option value="all">All Dates</option>
+                    <option value="range">Date Range</option>
                     <option value="specific">Specific Date</option>
                   </select>
-                  {reportDate !== "all" && (
+
+                  {reportDateMode === "range" && (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        alignItems: "center",
+                        flex: 1,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <label style={{ fontWeight: "500", minWidth: "60px" }}>
+                          From:
+                        </label>
+                        <input
+                          type="date"
+                          value={reportDateFrom}
+                          onChange={(e) => setReportDateFrom(e.target.value)}
+                          style={{
+                            padding: "8px",
+                            borderRadius: "4px",
+                            border: "1px solid #ddd",
+                            width: "180px",
+                          }}
+                        />
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <label style={{ fontWeight: "500", minWidth: "40px" }}>
+                          To:
+                        </label>
+                        <input
+                          type="date"
+                          value={reportDateTo}
+                          onChange={(e) => setReportDateTo(e.target.value)}
+                          style={{
+                            padding: "8px",
+                            borderRadius: "4px",
+                            border: "1px solid #ddd",
+                            width: "180px",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {reportDateMode === "specific" && (
                     <input
                       type="date"
                       value={reportDate}
@@ -2176,14 +2540,23 @@ export default function AdminDashboard({ user, onLogout }) {
                 </div>
               </div>
 
-              {/* Print Button */}
-              <button
-                onClick={printReport}
-                className="export-btn"
-                style={{ marginTop: "10px" }}
-              >
-                Print Report
-              </button>
+              {/* Print and Export Buttons */}
+              <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                <button
+                  onClick={printReport}
+                  className="export-btn"
+                  style={{ minWidth: "140px" }}
+                >
+                  Print Report
+                </button>
+                <button
+                  onClick={exportToExcel}
+                  className="export-btn"
+                  style={{ backgroundColor: "#27ae60" }}
+                >
+                  📊 Export to Excel
+                </button>
+              </div>
             </div>
 
             {/* Report Preview */}
@@ -2475,6 +2848,135 @@ export default function AdminDashboard({ user, onLogout }) {
           </div>
         )}
       </div>
+
+      {/* Modal for showing unsubmitted classes */}
+      {showSubmissionModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "white",
+              borderRadius: "8px",
+              padding: "30px",
+              maxWidth: "600px",
+              maxHeight: "80vh",
+              overflowY: "auto",
+              boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+            }}
+          >
+            <h2
+              style={{ marginTop: 0, color: "#e74c3c", marginBottom: "20px" }}
+            >
+              ⚠️ Attendance Not Submitted
+            </h2>
+            <p style={{ color: "#666", marginBottom: "20px" }}>
+              The following classes have not submitted attendance for{" "}
+              <strong>
+                {reportDateMode === "range"
+                  ? new Date(reportDateFrom).toLocaleDateString()
+                  : new Date(reportDate).toLocaleDateString()}
+              </strong>
+              :
+            </p>
+
+            <div
+              style={{
+                backgroundColor: "#f9f3f3",
+                border: "1px solid #e74c3c",
+                borderRadius: "4px",
+                padding: "15px",
+                marginBottom: "20px",
+              }}
+            >
+              <ul
+                style={{
+                  margin: 0,
+                  paddingLeft: "20px",
+                  listStyleType: "disc",
+                }}
+              >
+                {unsubmittedClasses.map((cls) => (
+                  <li
+                    key={cls.id}
+                    style={{
+                      marginBottom: "8px",
+                      color: "#333",
+                      fontSize: "14px",
+                    }}
+                  >
+                    {cls.name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <p
+              style={{ color: "#666", fontSize: "13px", marginBottom: "20px" }}
+            >
+              Do you want to continue with the report anyway?
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "10px",
+              }}
+            >
+              <button
+                onClick={() => {
+                  setShowSubmissionModal(false);
+                  setUnsubmittedClasses([]);
+                }}
+                style={{
+                  padding: "8px 16px",
+                  border: "1px solid #bdc3c7",
+                  borderRadius: "4px",
+                  backgroundColor: "#ecf0f1",
+                  color: "#333",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setShowSubmissionModal(false);
+                  setUnsubmittedClasses([]);
+                  setProceedWithPrint(true);
+                  await performPrintReport();
+                }}
+                style={{
+                  padding: "8px 16px",
+                  border: "none",
+                  borderRadius: "4px",
+                  backgroundColor: "#27ae60",
+                  color: "white",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                }}
+              >
+                Continue & Print
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

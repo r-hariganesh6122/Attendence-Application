@@ -355,6 +355,7 @@ function TeacherDashboard({ user, onLogout }) {
                     disabled={
                       !attendance[student.id]?.absent || !isAttendanceEditable()
                     }
+                    maxLength="40"
                     className="reason-input"
                   />
                 </td>

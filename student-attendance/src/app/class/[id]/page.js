@@ -27,6 +27,8 @@ export default function ClassDetailsPage({ params }) {
   const [editStudent, setEditStudent] = useState(null);
   const [editStudentSearch, setEditStudentSearch] = useState("");
   const [selectedStudentToRemove, setSelectedStudentToRemove] = useState("");
+  const [showStudentModal, setShowStudentModal] = useState(false);
+  const [modalStudent, setModalStudent] = useState(null);
 
   // Teacher management states
   const [teacherTab, setTeacherTab] = useState("list");
@@ -220,6 +222,82 @@ export default function ClassDetailsPage({ params }) {
       }
     } catch (error) {
       alert("Failed to update student: " + error.message);
+    }
+  };
+
+  // Open Student Modal for editing
+  const openStudentModal = (student) => {
+    setModalStudent({
+      id: student.id,
+      rollNo: student.rollNo,
+      regNo: student.regNo,
+      studentName: student.studentName,
+      residence: student.residence,
+      classId: student.classId,
+    });
+    setShowStudentModal(true);
+  };
+
+  // Save Student from Modal
+  const saveModalStudent = async () => {
+    if (
+      !modalStudent.rollNo.trim() ||
+      !modalStudent.regNo.trim() ||
+      !modalStudent.studentName.trim()
+    ) {
+      alert("Please fill in all required fields");
+      return;
+    }
+
+    try {
+      const res = await apiCall("/api/students", {
+        method: "PUT",
+        body: JSON.stringify({
+          studentId: modalStudent.id,
+          rollNo: modalStudent.rollNo,
+          regNo: modalStudent.regNo,
+          studentName: modalStudent.studentName,
+          residence: modalStudent.residence,
+          classId: modalStudent.classId,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert("Student updated successfully!");
+        setShowStudentModal(false);
+        setModalStudent(null);
+        fetchStudents();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to update student: " + error.message);
+    }
+  };
+
+  // Delete Student from Modal
+  const deleteModalStudent = async () => {
+    if (!confirm("Are you sure you want to delete this student?")) {
+      return;
+    }
+
+    try {
+      const res = await apiCall(`/api/students?studentId=${modalStudent.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert("Student deleted successfully!");
+        setShowStudentModal(false);
+        setModalStudent(null);
+        fetchStudents();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to delete student: " + error.message);
     }
   };
 
@@ -515,6 +593,7 @@ export default function ClassDetailsPage({ params }) {
                     <div>Reg No</div>
                     <div>Name</div>
                     <div>Residence</div>
+                    <div>Action</div>
                   </div>
                   {students.length === 0 ? (
                     <div className="list-item">
@@ -528,6 +607,35 @@ export default function ClassDetailsPage({ params }) {
                         <div>{student.regNo || "-"}</div>
                         <div>{student.studentName || "-"}</div>
                         <div>{student.residence || "-"}</div>
+                        <div>
+                          <button
+                            onClick={() => openStudentModal(student)}
+                            style={{
+                              backgroundColor: "#f5f5f5",
+                              color: "#333",
+                              border: "1px solid #ddd",
+                              borderRadius: "4px",
+                              padding: "6px 10px",
+                              cursor: "pointer",
+                              fontSize: "16px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                            title="Edit Student"
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                            >
+                              <path d="M2 14l1-4 9-9a2 2 0 0 1 2.8 0 2 2 0 0 1 0 2.8L5.8 13l-3.8 1z" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}
@@ -583,8 +691,7 @@ export default function ClassDetailsPage({ params }) {
                     </div>
                     <div className="form-group">
                       <label>Residence</label>
-                      <input
-                        type="text"
+                      <select
                         value={newStudent.residence}
                         onChange={(e) =>
                           setNewStudent({
@@ -592,8 +699,12 @@ export default function ClassDetailsPage({ params }) {
                             residence: e.target.value,
                           })
                         }
-                        placeholder="Enter residence"
-                      />
+                      >
+                        <option value="">Select residence type</option>
+                        <option value="H">Hosteller (H)</option>
+                        <option value="D">Day Scholar (D)</option>
+                        <option value="OSS">Outside Stayer (OSS)</option>
+                      </select>
                     </div>
                   </div>
                   <button onClick={addStudent} className="add-btn">
@@ -856,8 +967,7 @@ export default function ClassDetailsPage({ params }) {
                         </div>
                         <div className="form-group">
                           <label>Residence</label>
-                          <input
-                            type="text"
+                          <select
                             value={editStudent.residence}
                             onChange={(e) =>
                               setEditStudent({
@@ -865,8 +975,12 @@ export default function ClassDetailsPage({ params }) {
                                 residence: e.target.value,
                               })
                             }
-                            placeholder="Enter residence"
-                          />
+                          >
+                            <option value="">Select residence type</option>
+                            <option value="H">Hosteller (H)</option>
+                            <option value="D">Day Scholar (D)</option>
+                            <option value="OSS">Outside Stayer (OSS)</option>
+                          </select>
                         </div>
                       </div>
                     </div>
@@ -878,6 +992,164 @@ export default function ClassDetailsPage({ params }) {
                   >
                     Update Student
                   </button>
+                </div>
+              )}
+
+              {/* Student Edit Modal */}
+              {showStudentModal && modalStudent && (
+                <div
+                  style={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: "rgba(0, 0, 0, 0.5)",
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    zIndex: 1000,
+                  }}
+                  onClick={() => {
+                    setShowStudentModal(false);
+                    setModalStudent(null);
+                  }}
+                >
+                  <div
+                    style={{
+                      backgroundColor: "white",
+                      borderRadius: "8px",
+                      padding: "30px",
+                      maxWidth: "500px",
+                      width: "90%",
+                      boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                      maxHeight: "90vh",
+                      overflowY: "auto",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <h3 style={{ marginTop: 0 }}>Edit Student</h3>
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label>Roll No</label>
+                        <input
+                          type="text"
+                          value={modalStudent.rollNo}
+                          onChange={(e) =>
+                            setModalStudent({
+                              ...modalStudent,
+                              rollNo: e.target.value,
+                            })
+                          }
+                          placeholder="Enter roll number"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Reg No</label>
+                        <input
+                          type="text"
+                          value={modalStudent.regNo}
+                          onChange={(e) =>
+                            setModalStudent({
+                              ...modalStudent,
+                              regNo: e.target.value,
+                            })
+                          }
+                          placeholder="Enter registration number"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Student Name</label>
+                        <input
+                          type="text"
+                          value={modalStudent.studentName}
+                          onChange={(e) =>
+                            setModalStudent({
+                              ...modalStudent,
+                              studentName: e.target.value,
+                            })
+                          }
+                          placeholder="Enter student name"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Residence</label>
+                        <select
+                          value={modalStudent.residence}
+                          onChange={(e) =>
+                            setModalStudent({
+                              ...modalStudent,
+                              residence: e.target.value,
+                            })
+                          }
+                        >
+                          <option value="">Select residence type</option>
+                          <option value="H">Hosteller (H)</option>
+                          <option value="D">Day Scholar (D)</option>
+                          <option value="OSS">Outside Stayer (OSS)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        marginTop: "20px",
+                      }}
+                    >
+                      <button
+                        onClick={saveModalStudent}
+                        style={{
+                          flex: 1,
+                          padding: "10px",
+                          backgroundColor: "#28a745",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Save Changes
+                      </button>
+                      <button
+                        onClick={deleteModalStudent}
+                        style={{
+                          flex: 1,
+                          padding: "10px",
+                          backgroundColor: "#dc3545",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Delete Student
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowStudentModal(false);
+                          setModalStudent(null);
+                        }}
+                        style={{
+                          flex: 0,
+                          padding: "10px 20px",
+                          backgroundColor: "#6c757d",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
