@@ -29,6 +29,11 @@ export default function AppRoot() {
         localStorage.removeItem("user");
       }
     }
+
+    // Initialize app (start Sunday locker scheduler)
+    fetch("/api/init").catch((error) =>
+      console.error("Failed to initialize app:", error),
+    );
   }, []);
 
   const handleLogin = (userData, token) => {
@@ -44,7 +49,9 @@ export default function AppRoot() {
     setIsLoggedIn(false);
     setUser(null);
     localStorage.removeItem("user");
+    localStorage.setItem("skipAutoLogin", "true");
     clearToken();
+    // Credentials are saved, but skipAutoLogin flag prevents auto-login on next visit
   };
 
   if (!isMounted) {

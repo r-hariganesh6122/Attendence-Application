@@ -16,14 +16,45 @@ export async function POST(request) {
     }
 
     // Verify user exists in database and get their ID
+    // Ensure ID is a valid number
+    const userId =
+      typeof user.id === "string" ? parseInt(user.id, 10) : user.id;
+
+    if (isNaN(userId)) {
+      console.error("Invalid user ID in token:", user.id);
+      return NextResponse.json(
+        { success: false, message: "Invalid user ID in token" },
+        { status: 400 },
+      );
+    }
+
+    console.log("Lock past dates - User from token:", {
+      id: user.id,
+      parsedId: userId,
+      name: user.name,
+      role: user.role,
+    });
+
     const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: { id: true },
+      where: { id: userId },
+      select: { id: true, name: true, mobile: true },
+    });
+
+    console.log("Lock past dates - DB Lookup result:", {
+      found: !!dbUser,
+      searchedId: userId,
+      result: dbUser,
     });
 
     if (!dbUser) {
+      console.error(
+        "User not found in database. ID searched:",
+        userId,
+        "Token user:",
+        user,
+      );
       return NextResponse.json(
-        { success: false, message: "User not found" },
+        { success: false, message: "User not found in database" },
         { status: 404 },
       );
     }

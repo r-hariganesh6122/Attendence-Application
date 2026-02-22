@@ -490,7 +490,7 @@
 }
 
 .reason-input {
-  width: 100%;
+  width: 90%;
   padding: 0.5rem;
   border: 2px solid #ddd;
   border-radius: 4px;
@@ -501,6 +501,8 @@
     border-color 0.3s,
     box-shadow 0.3s;
   min-height: 36px;
+  margin: 0 auto;
+  display: block;
 }
 
 /* Mobile - Hide Name Column on mobile (screens < 641px) */
@@ -734,6 +736,44 @@
   .dept-btn {
     width: 100%;
   }
+}
+
+/* Dashboard Tab Styles */
+.dashboard-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.stat-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.stat-card .stat-number {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: bold;
 }
 
 /* Management Tab Styles */

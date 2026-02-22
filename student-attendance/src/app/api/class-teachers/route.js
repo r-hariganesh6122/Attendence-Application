@@ -110,6 +110,61 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const classId = searchParams.get("classId");
     const teacherId = searchParams.get("teacherId");
+    const assignmentId = searchParams.get("assignmentId");
+
+    // If assignmentId is provided, fetch specific assignment by ID
+    if (assignmentId) {
+      if (isNaN(Number(assignmentId))) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "assignmentId must be a valid number",
+          },
+          { status: 400 },
+        );
+      }
+
+      const assignment = await prisma.classTeacher.findUnique({
+        where: { id: Number(assignmentId) },
+        include: {
+          course: {
+            select: {
+              id: true,
+              courseCode: true,
+              subject: true,
+            },
+          },
+          teacher: {
+            select: {
+              id: true,
+              name: true,
+              mobile: true,
+            },
+          },
+          class: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (!assignment) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Assignment not found",
+          },
+          { status: 404 },
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        assignment,
+      });
+    }
 
     // If teacherId is provided, fetch all courses taught by this teacher across all classes
     if (teacherId) {
@@ -143,7 +198,8 @@ export async function GET(request) {
       return NextResponse.json(
         {
           success: false,
-          message: "classId or teacherId query parameter is required",
+          message:
+            "classId, teacherId, or assignmentId query parameter is required",
         },
         { status: 400 },
       );
@@ -185,9 +241,13 @@ export async function GET(request) {
       assignments,
     });
   } catch (error) {
-    console.error("GET /api/class-teachers error:", error);
+    console.error("GET /api/class-teachers error:", error.message);
+    console.error("Error stack:", error.stack);
     return NextResponse.json(
-      { success: false, message: "Failed to fetch assignments" },
+      {
+        success: false,
+        message: `Failed to fetch assignments: ${error.message}`,
+      },
       { status: 500 },
     );
   }
@@ -293,18 +353,39 @@ export async function DELETE(request) {
       );
     }
 
-    const body = await request.json();
+    // Try to get assignmentId from query parameters first
+    const { searchParams } = new URL(request.url);
+    const queryAssignmentId = searchParams.get("assignmentId");
 
-    // Validate request body with Zod
-    const validation = validateClassTeacherDelete(body);
-    if (!validation.success) {
-      return NextResponse.json(
-        { success: false, message: validation.error },
-        { status: 400 },
-      );
+    let assignmentId;
+
+    if (queryAssignmentId) {
+      // Use query parameter if provided
+      if (isNaN(Number(queryAssignmentId))) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "assignmentId must be a valid number",
+          },
+          { status: 400 },
+        );
+      }
+      assignmentId = queryAssignmentId;
+    } else {
+      // Otherwise, try to parse from request body
+      const body = await request.json();
+
+      // Validate request body with Zod
+      const validation = validateClassTeacherDelete(body);
+      if (!validation.success) {
+        return NextResponse.json(
+          { success: false, message: validation.error },
+          { status: 400 },
+        );
+      }
+
+      assignmentId = validation.data.assignmentId;
     }
-
-    const { assignmentId } = validation.data;
 
     await prisma.classTeacher.delete({
       where: { id: Number(assignmentId) },

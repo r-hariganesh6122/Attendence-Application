@@ -6,7 +6,7 @@ const assignDefaultTeacherToAllClasses = require("./assignDefaultTeacherToAllCla
 const importTeachers = require("./importTeachers");
 const importStudents = require("./importStudents");
 const seedAttendance = require("./seedAttendance");
-const seedAttendance20260206 = require("./seedAttendance20260206");
+const seedSpecialHolidays = require("./seedSpecialHolidays");
 const hashExistingPasswords = require("./hashExistingPasswords");
 
 async function runAllSeeds() {
@@ -18,9 +18,12 @@ async function runAllSeeds() {
     await importTeachers();
     await importStudents();
     await seedAttendance();
-    await seedAttendance20260206();
+    await seedSpecialHolidays();
     await hashExistingPasswords();
     console.log("All seeds executed successfully.");
+    console.log(
+      "Note: Sunday locking is now automated and will run on app startup.",
+    );
   } catch (error) {
     console.error("Error running seeds:", error);
     process.exit(1);

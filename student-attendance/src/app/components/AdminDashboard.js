@@ -67,7 +67,7 @@ export default function AdminDashboard({ user, onLogout }) {
     }
   };
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState("management");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedProgram, setSelectedProgram] = useState("BE");
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [departments, setDepartments] = useState([]);
@@ -98,6 +98,38 @@ export default function AdminDashboard({ user, onLogout }) {
   const [teacherSearch, setTeacherSearch] = useState("");
   const [selectedTeacherToRemove, setSelectedTeacherToRemove] = useState("");
 
+  // Dashboard date selection state
+  const [dashboardDateMode, setDashboardDateMode] = useState("specific"); // "range" or "specific"
+  const [dashboardDate, setDashboardDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
+  const [dashboardDateFrom, setDashboardDateFrom] = useState(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+  ); // 30 days ago
+  const [dashboardDateTo, setDashboardDateTo] = useState(
+    new Date().toISOString().split("T")[0],
+  ); // Today
+
+  // Dashboard hierarchy selection state
+  const [dashboardType, setDashboardType] = useState("whole"); // whole, department, class
+  const [dashboardProgram, setDashboardProgram] = useState("all");
+  const [dashboardDepartment, setDashboardDepartment] = useState(null);
+  const [dashboardClass, setDashboardClass] = useState(null);
+  const [dashboardStats, setDashboardStats] = useState({
+    totalStudents: 0,
+    studentsFromClassesOnHoliday: 0,
+    present: 0,
+    absent: 0,
+    avgPresent: 0,
+    avgAbsent: 0,
+    studentsNotOnHoliday: 0,
+    avgAttendancePercent: 0,
+  });
+
+  // Dashboard-specific department/class lists
+  const [dashboardDepartments, setDashboardDepartments] = useState([]);
+  const [dashboardClasses, setDashboardClasses] = useState([]);
+
   // Report state
   const [reportProgram, setReportProgram] = useState("all");
   const [reportDepartments, setReportDepartments] = useState([]);
@@ -125,18 +157,47 @@ export default function AdminDashboard({ user, onLogout }) {
 
   // Attendance Lock Management States
   const [lockManagementTab, setLockManagementTab] = useState("list");
+  const [lockManagementSubTab, setLockManagementSubTab] =
+    useState("attendance"); // "attendance" or "holiday"
   const [lockType, setLockType] = useState("whole"); // whole, department, class
   const [lockProgram, setLockProgram] = useState("all");
   const [lockDepartment, setLockDepartment] = useState(null);
   const [lockClass, setLockClass] = useState(null);
+  const [lockDateMode, setLockDateMode] = useState("specific"); // "range" or "specific"
   const [lockDate, setLockDate] = useState(
     new Date().toISOString().split("T")[0],
   );
+  const [lockDateFrom, setLockDateFrom] = useState(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+  ); // 30 days ago
+  const [lockDateTo, setLockDateTo] = useState(
+    new Date().toISOString().split("T")[0],
+  ); // Today
 
   const [lockedDates, setLockedDates] = useState([]); // List of locked dates for viewing
   const [lockDepartments, setLockDepartments] = useState([]);
   const [lockClasses, setLockClasses] = useState([]);
   const [isCurrentDateLocked, setIsCurrentDateLocked] = useState(false);
+
+  // Holiday Lock Management States
+  const [holidayLockType, setHolidayLockType] = useState("whole");
+  const [holidayLockProgram, setHolidayLockProgram] = useState("all");
+  const [holidayLockDepartment, setHolidayLockDepartment] = useState(null);
+  const [holidayLockClass, setHolidayLockClass] = useState(null);
+  const [holidayLockDateMode, setHolidayLockDateMode] = useState("specific");
+  const [holidayLockDate, setHolidayLockDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
+  const [holidayLockDateFrom, setHolidayLockDateFrom] = useState(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+  );
+  const [holidayLockDateTo, setHolidayLockDateTo] = useState(
+    new Date().toISOString().split("T")[0],
+  );
+  const [holidayLockReason, setHolidayLockReason] = useState("");
+  const [holidayLockedDates, setHolidayLockedDates] = useState([]);
+  const [holidayLockDepartments, setHolidayLockDepartments] = useState([]);
+  const [holidayLockClasses, setHolidayLockClasses] = useState([]);
 
   // State for attendance submission check
   const [showSubmissionModal, setShowSubmissionModal] = useState(false);
@@ -365,6 +426,28 @@ export default function AdminDashboard({ user, onLogout }) {
     fetchReportDepartments();
   }, [reportProgram]);
 
+  // Fetch departments for dashboard based on selected program
+  useEffect(() => {
+    async function fetchDashboardDepartments() {
+      let url = "/api/departments";
+      if (dashboardProgram !== "all") {
+        url += `?program=${dashboardProgram}`;
+      }
+      const res = await apiCall(url);
+      const data = await res.json();
+      if (data.success) {
+        setDashboardDepartments(data.departments);
+        setDashboardDepartment(null);
+        setDashboardClass(null);
+      } else {
+        setDashboardDepartments([]);
+        setDashboardDepartment(null);
+        setDashboardClass(null);
+      }
+    }
+    fetchDashboardDepartments();
+  }, [dashboardProgram]);
+
   // Fetch classes for report filter based on selected department
   useEffect(() => {
     async function fetchClassesForReport() {
@@ -404,6 +487,32 @@ export default function AdminDashboard({ user, onLogout }) {
     }
   }, [reportDepartments, reportDepartment]);
 
+  // Fetch classes for dashboard based on selected department
+  useEffect(() => {
+    async function fetchDashboardClasses() {
+      let allClasses = [];
+      if (dashboardDepartment) {
+        const res = await apiCall(
+          `/api/classes?departmentId=${dashboardDepartment.id}`,
+        );
+        const data = await res.json();
+        if (data.success) {
+          allClasses = data.classes.map((c) => ({
+            ...c,
+            departmentId: dashboardDepartment.id,
+          }));
+        }
+      }
+      setDashboardClasses(allClasses);
+      if (dashboardDepartment && allClasses.length === 0) {
+        setDashboardClass(null);
+      }
+    }
+    if (dashboardDepartment) {
+      fetchDashboardClasses();
+    }
+  }, [dashboardDepartment]);
+
   // Update report preview when filters change
   useEffect(() => {
     async function updateReportPreview() {
@@ -438,6 +547,8 @@ export default function AdminDashboard({ user, onLogout }) {
     updateReportPreview();
   }, [
     activeTab,
+    reportProgram,
+    reportDepartments,
     reportDateMode,
     reportDate,
     reportDateFrom,
@@ -529,6 +640,89 @@ export default function AdminDashboard({ user, onLogout }) {
     }
     fetchAllClasses();
   }, [lockType]);
+
+  // Fetch holiday lock departments based on selected program
+  useEffect(() => {
+    async function fetchHolidayLockDeptList() {
+      if (!holidayLockProgram || holidayLockProgram === "all") {
+        setHolidayLockDepartments([]);
+        setHolidayLockDepartment(null);
+        setHolidayLockClass(null);
+        return;
+      }
+      try {
+        const res = await apiCall(
+          `/api/departments?program=${holidayLockProgram}`,
+        );
+        const data = await res.json();
+        if (data.success) {
+          setHolidayLockDepartments(data.departments);
+          setHolidayLockDepartment(null);
+          setHolidayLockClass(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch holiday lock departments:", error);
+        setHolidayLockDepartments([]);
+      }
+    }
+    fetchHolidayLockDeptList();
+  }, [holidayLockProgram]);
+
+  // Fetch holiday lock classes based on selected department
+  useEffect(() => {
+    async function fetchHolidayLockClassList() {
+      if (!holidayLockDepartment) {
+        setHolidayLockClasses([]);
+        setHolidayLockClass(null);
+        return;
+      }
+      try {
+        const res = await apiCall(
+          `/api/classes?departmentId=${holidayLockDepartment.id}`,
+        );
+        const data = await res.json();
+        if (data.success) {
+          setHolidayLockClasses(data.classes);
+          setHolidayLockClass(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch holiday lock classes:", error);
+        setHolidayLockClasses([]);
+      }
+    }
+    fetchHolidayLockClassList();
+  }, [holidayLockDepartment]);
+
+  // Fetch holiday lock classes for whole institution
+  useEffect(() => {
+    async function fetchAllHolidayLockClasses() {
+      if (holidayLockType !== "whole") {
+        return;
+      }
+      try {
+        const res = await apiCall("/api/classes");
+        const data = await res.json();
+        if (data.success) {
+          setHolidayLockClasses(data.classes);
+        }
+      } catch (error) {
+        console.error("Failed to fetch all holiday lock classes:", error);
+        setHolidayLockClasses([]);
+      }
+    }
+    fetchAllHolidayLockClasses();
+  }, [holidayLockType]);
+
+  // Fetch holiday locked dates when holiday lock tab or class changes
+  useEffect(() => {
+    if (
+      activeTab === "attendance-lock" &&
+      lockManagementSubTab === "holiday" &&
+      holidayLockClass
+    ) {
+      fetchHolidayLockedDates();
+    }
+  }, [activeTab, lockManagementSubTab, holidayLockClass]);
 
   // Check if current lock date is locked
   useEffect(() => {
@@ -651,8 +845,102 @@ export default function AdminDashboard({ user, onLogout }) {
     // Determine if using date range or single date
     const isDateRange = selectedDate === null || selectedDate === undefined;
 
-    if (!isDateRange) {
+    if (isDateRange) {
+      // Handle date strings directly without timezone conversion
+      fromStr =
+        typeof dateFrom === "string" && dateFrom.includes("-")
+          ? dateFrom
+          : new Date(dateFrom).toISOString().split("T")[0];
+      toStr =
+        typeof dateTo === "string" && dateTo.includes("-")
+          ? dateTo
+          : new Date(dateTo).toISOString().split("T")[0];
+    } else {
       dateStr = new Date(selectedDate).toISOString().split("T")[0];
+
+      // Check if this is a whole-institution holiday
+      if (type === "whole") {
+        const allClasses = reportClasses;
+        const resHolidayLocks = await apiCall(
+          `/api/holiday-lock?classId=${allClasses[0]?.id}&listAll=true`,
+        );
+        let dataHolidayLocks = {};
+        try {
+          dataHolidayLocks = await resHolidayLocks.json();
+        } catch {
+          dataHolidayLocks = { success: false };
+        }
+
+        // Check if all classes have a holiday lock on this date
+        if (dataHolidayLocks.success && dataHolidayLocks.locks) {
+          const holidayOnDate = dataHolidayLocks.locks.find(
+            (lock) => lock.date === dateStr,
+          );
+          if (holidayOnDate) {
+            // This is a whole-institution holiday
+            return {
+              "🔒 INSTITUTION HOLIDAY": {
+                "": [
+                  {
+                    rollNo: "HOLIDAY",
+                    name: `Holiday - ${holidayOnDate.reason}`,
+                    residence: "",
+                    reason: holidayOnDate.reason,
+                    informed: "",
+                    absenceCount: 0,
+                    date: dateStr,
+                    isHoliday: true,
+                  },
+                ],
+              },
+            };
+          }
+        }
+      }
+
+      // Check if this is a department-level holiday
+      if (type === "department" && dept) {
+        const deptClasses = reportClasses.filter(
+          (c) => c.departmentId === dept.id,
+        );
+        if (deptClasses.length > 0) {
+          const resHolidayLocks = await apiCall(
+            `/api/holiday-lock?classId=${deptClasses[0]?.id}&listAll=true`,
+          );
+          let dataHolidayLocks = {};
+          try {
+            dataHolidayLocks = await resHolidayLocks.json();
+          } catch {
+            dataHolidayLocks = { success: false };
+          }
+
+          // Check if the date is a holiday
+          if (dataHolidayLocks.success && dataHolidayLocks.locks) {
+            const holidayOnDate = dataHolidayLocks.locks.find(
+              (lock) => lock.date === dateStr,
+            );
+            if (holidayOnDate) {
+              // This is a department-level holiday
+              return {
+                "🔒 DEPARTMENT HOLIDAY": {
+                  "": [
+                    {
+                      rollNo: "HOLIDAY",
+                      name: `Holiday - ${holidayOnDate.reason}`,
+                      residence: "",
+                      reason: holidayOnDate.reason,
+                      informed: "",
+                      absenceCount: 0,
+                      date: dateStr,
+                      isHoliday: true,
+                    },
+                  ],
+                },
+              };
+            }
+          }
+        }
+      }
     }
 
     let deptsToProcess = [];
@@ -683,6 +971,34 @@ export default function AdminDashboard({ user, onLogout }) {
 
       report[dept.name] = {};
       for (const classItem of classes) {
+        // Fetch all holiday locks for this class
+        const resHolidayLocks = await apiCall(
+          `/api/holiday-lock?classId=${classItem.id}&listAll=true`,
+        );
+        let dataHolidayLocks = {};
+        try {
+          dataHolidayLocks = await resHolidayLocks.json();
+        } catch {
+          dataHolidayLocks = { success: false };
+        }
+
+        // Filter holiday locks based on date range
+        let filteredHolidayLocks = [];
+        if (dataHolidayLocks.success && dataHolidayLocks.locks) {
+          filteredHolidayLocks = dataHolidayLocks.locks.filter((lock) => {
+            if (isDateRange) {
+              // Check if lock date is within range
+              const lockDate = new Date(lock.date);
+              const fromDate = new Date(fromStr);
+              const toDate = new Date(toStr);
+              return lockDate >= fromDate && lockDate <= toDate;
+            } else {
+              // Check if lock date matches specific date
+              return lock.date === dateStr;
+            }
+          });
+        }
+
         // Fetch attendance for this class
         let resAttendance;
         if (isDateRange) {
@@ -711,6 +1027,21 @@ export default function AdminDashboard({ user, onLogout }) {
           };
         }
         let absences = [];
+
+        // Add filtered holiday lock information to the report
+        filteredHolidayLocks.forEach((lock) => {
+          absences.push({
+            rollNo: "HOLIDAY",
+            name: `🔒 Holiday - ${lock.reason || "No Reason"}`,
+            residence: "",
+            reason: lock.reason || "No Reason",
+            informed: "",
+            absenceCount: 0,
+            date: lock.date,
+            isHoliday: true,
+          });
+        });
+
         if (dataAttendance.success) {
           const { students, attendanceRecords } = dataAttendance;
           // Get all attendance records for total leaves calculation
@@ -748,13 +1079,23 @@ export default function AdminDashboard({ user, onLogout }) {
                 if (informedStatus === "not-informed" && isInformed) return;
               }
 
+              // Check if date is a Sunday
+              let absenceReason = rec.absenceReason || "";
+              if (rec.date) {
+                const dateObj = new Date(rec.date);
+                if (dateObj.getUTCDay() === 0) {
+                  // 0 = Sunday
+                  absenceReason = "Sunday";
+                }
+              }
+
               absences.push({
                 rollNo: studentMap[rec.studentId]?.rollNo || rec.studentId,
                 name: studentMap[rec.studentId]?.studentName || "",
                 residence: studentResidence,
-                reason: rec.absenceReason || "",
+                reason: absenceReason,
                 informed: rec.informed || "",
-                leavesTaken: allAttendanceRecords.filter(
+                absenceCount: allAttendanceRecords.filter(
                   (r2) =>
                     r2.studentId === rec.studentId && r2.status === "absent",
                 ).length,
@@ -793,10 +1134,88 @@ export default function AdminDashboard({ user, onLogout }) {
         classesToCheck = [reportClass];
       }
 
+      // Handle date conversion - account for timezone issues
+      let dateStr;
+      if (typeof dateToCheck === "string" && dateToCheck.includes("-")) {
+        // Already in YYYY-MM-DD format
+        dateStr = dateToCheck;
+      } else {
+        // Convert Date object to YYYY-MM-DD in UTC
+        const dateObj = new Date(dateToCheck);
+        dateStr = `${dateObj.getUTCFullYear()}-${String(
+          dateObj.getUTCMonth() + 1,
+        ).padStart(2, "0")}-${String(dateObj.getUTCDate()).padStart(2, "0")}`;
+      }
+
+      // Check if the selected date is a Sunday
+      const selectedDateObj = new Date(dateStr + "T00:00:00.000Z");
+      const isSunday = selectedDateObj.getUTCDay() === 0;
+      console.log(`Checking attendance for ${dateStr}. Is Sunday: ${isSunday}`);
+
+      // Get holiday locks for all classes to determine scope
+      const holidayLocksMap = {}; // Map: classId -> boolean (has holiday on this date)
+
+      for (const classItem of reportClasses) {
+        try {
+          const holidayLockRes = await apiCall(
+            `/api/holiday-lock?classId=${classItem.id}&date=${dateStr}`,
+          );
+          const holidayLockData = await holidayLockRes.json();
+          holidayLocksMap[classItem.id] =
+            holidayLockData.success && holidayLockData.isLocked;
+          if (holidayLockData.success && holidayLockData.isLocked) {
+            console.log(
+              `Class ${classItem.name} has holiday lock on ${dateStr}:`,
+              holidayLockData.lock?.reason || "Unknown",
+            );
+          }
+        } catch (error) {
+          console.error(
+            `Failed to check holiday lock for class ${classItem.id}:`,
+            error,
+          );
+          holidayLocksMap[classItem.id] = false;
+        }
+      }
+
+      // Count how many classes have holiday locks on this date
+      const classesWithHoliday = Object.values(holidayLocksMap).filter(
+        (has) => has,
+      ).length;
+      console.log(
+        `Total classes with holiday on ${dateStr}: ${classesWithHoliday}/${reportClasses.length}`,
+      );
+
+      // If it's a Sunday and ALL classes are locked, return empty
+      if (isSunday && classesWithHoliday === reportClasses.length) {
+        console.log(
+          `${dateStr} is a Sunday with all classes locked - skipping attendance checks`,
+        );
+        return []; // Institution-wide Sunday closure - no attendance needed
+      }
+
+      // If institution-wide holiday (all classes have holiday locks for non-Sunday dates), skip all checks
+      if (
+        !isSunday &&
+        classesWithHoliday === reportClasses.length &&
+        classesWithHoliday > 0
+      ) {
+        console.log("Institution-wide holiday detected, returning empty");
+        return []; // Institution-wide holiday - show only holiday message
+      }
+
       // Check each class for attendance records on the selected date
       for (const classItem of classesToCheck) {
         try {
-          const dateStr = new Date(dateToCheck).toISOString().split("T")[0];
+          // Check if this class has a holiday lock on this date (use already-fetched map)
+          if (holidayLocksMap[classItem.id]) {
+            console.log(
+              `Skipping ${classItem.name} - has holiday lock on ${dateStr}`,
+            );
+            continue; // Skip this class, it's submitted as a holiday
+          }
+
+          // If not a holiday, check for attendance records
           const res = await apiCall(
             `/api/attendance?classId=${classItem.id}&from=${dateStr}&to=${dateStr}`,
           );
@@ -808,6 +1227,7 @@ export default function AdminDashboard({ user, onLogout }) {
             !data.attendanceRecords ||
             data.attendanceRecords.length === 0
           ) {
+            console.log(`${classItem.name} has not submitted on ${dateStr}`);
             unsubmitted.push({
               id: classItem.id,
               name: classItem.name,
@@ -827,6 +1247,9 @@ export default function AdminDashboard({ user, onLogout }) {
         }
       }
 
+      console.log(
+        `Final unsubmitted count for ${dateStr}: ${unsubmitted.length}`,
+      );
       return unsubmitted;
     } catch (error) {
       console.error("Failed to check attendance submissions:", error);
@@ -1054,78 +1477,286 @@ export default function AdminDashboard({ user, onLogout }) {
           printContent += `<div class="date-header" ${pageBreak}>Date: ${dateDisplay}</div>`;
 
           const deptsOnDate = reportByDate[dateKey];
-          Object.entries(deptsOnDate).forEach(([deptName, classesOnDate]) => {
-            printContent += `<div class="department-wrapper">`;
-            printContent += `<div class="department-header">${deptName}</div>`;
-            Object.entries(classesOnDate).forEach(([className, absences]) => {
-              printContent += `<div class="class-header">Class: ${className}</div>`;
+
+          // Check if entire date is a holiday for whole institution
+          let dateHolidayReason = null;
+          if (reportType === "whole") {
+            let allHolidays = true;
+            let holidayReason = null;
+            Object.entries(deptsOnDate).forEach(([deptName, classesOnDate]) => {
+              Object.entries(classesOnDate).forEach(([className, absences]) => {
+                absences.forEach((student) => {
+                  if (student.isHoliday) {
+                    holidayReason = student.reason || holidayReason;
+                  } else {
+                    allHolidays = false;
+                  }
+                });
+              });
+            });
+            if (allHolidays && holidayReason) {
+              dateHolidayReason = holidayReason;
+            }
+          }
+
+          // If entire date is holiday, show simplified display
+          if (dateHolidayReason) {
+            printContent += `<div style="padding: 10px; background-color: #ffffcc; border-left: 3px solid #ffcc00; font-weight: 500; font-size: 18px;">🔒 Holiday - ${dateHolidayReason}</div>`;
+          } else {
+            // Add summary for this date first (only if not all holidays)
+            if (reportType !== "class") {
+              const summaryData = {};
+              let totalAbsencesThisDate = 0;
+
+              Object.entries(deptsOnDate).forEach(
+                ([deptName, classesOnDate]) => {
+                  let deptTotal = 0;
+                  Object.entries(classesOnDate).forEach(
+                    ([className, absences]) => {
+                      // Check if this class is all holidays
+                      const allClassHolidays = absences.every(
+                        (s) => s.isHoliday,
+                      );
+                      const classAbsences = allClassHolidays
+                        ? "Holiday"
+                        : absences.length;
+                      if (!summaryData[deptName]) {
+                        summaryData[deptName] = {};
+                      }
+                      summaryData[deptName][className] = classAbsences;
+                      if (!allClassHolidays) {
+                        deptTotal += absences.length;
+                        totalAbsencesThisDate += absences.length;
+                      }
+                    },
+                  );
+                  summaryData[deptName]["__total"] = deptTotal;
+                },
+              );
+
               printContent += `
-                <table>
-                  <thead>
-                    <tr>
-                      <th>S No</th>
-                      <th>Roll No</th>
-                      <th>Name</th>
-                      <th>Residence</th>
-                      <th>Absence Reason</th>
-                      <th>Status</th>
-                      <th>Leaves Taken</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <div style="margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
+                  <h3 style="margin-top: 0; color: #333;">Summary - ${dateDisplay}</h3>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Department</th>
+                        <th>Class</th>
+                        <th>Number of Absentees</th>
+                      </tr>
+                    </thead>
+                    <tbody>
               `;
-              absences.forEach((student, idx) => {
-                let status = "Not Informed";
-                if (typeof student.informed === "string") {
-                  status =
-                    student.informed.toLowerCase() === "informed"
-                      ? "Informed"
-                      : "Not Informed";
-                } else if (student.informed === true) {
-                  status = "Informed";
-                }
+
+              if (reportType === "whole") {
+                Object.entries(summaryData).forEach(([deptName, classData]) => {
+                  const deptTotal = classData["__total"];
+                  const classes = Object.entries(classData)
+                    .filter(([key]) => key !== "__total")
+                    .sort();
+
+                  classes.forEach(([className, count], idx) => {
+                    printContent += `
+                      <tr>
+                        <td>${idx === 0 ? deptName : ""}</td>
+                        <td>${className}</td>
+                        <td>${count}</td>
+                      </tr>
+                    `;
+                  });
+
+                  printContent += `
+                    <tr style="background-color: #e8e8e8; font-weight: bold;">
+                      <td>${deptName} Total</td>
+                      <td></td>
+                      <td>${deptTotal}</td>
+                    </tr>
+                  `;
+                });
+
                 printContent += `
-                  <tr>
-                    <td>${idx + 1}</td>
-                    <td>${student.rollNo}</td>
-                    <td>${student.name}</td>
-                    <td>${student.residence || ""}</td>
-                    <td>${student.reason || ""}</td>
-                    <td>${status}</td>
-                    <td>${student.leavesTaken || 0}</td>
+                  <tr style="background-color: #d0d0d0; font-weight: bold; font-size: 14px;">
+                    <td>Date Total</td>
+                    <td></td>
+                    <td>${totalAbsencesThisDate}</td>
                   </tr>
                 `;
-              });
+              } else if (reportType === "department") {
+                Object.entries(summaryData).forEach(([deptName, classData]) => {
+                  const deptTotal = classData["__total"];
+                  const classes = Object.entries(classData)
+                    .filter(([key]) => key !== "__total")
+                    .sort();
+
+                  classes.forEach(([className, count]) => {
+                    printContent += `
+                      <tr>
+                        <td>${deptName}</td>
+                        <td>${className}</td>
+                        <td>${count}</td>
+                      </tr>
+                    `;
+                  });
+
+                  printContent += `
+                    <tr style="background-color: #e8e8e8; font-weight: bold;">
+                      <td>${deptName} Total</td>
+                      <td></td>
+                      <td>${deptTotal}</td>
+                    </tr>
+                  `;
+                });
+              }
+
               printContent += `
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
+                </div>
               `;
-            });
-            printContent += `</div>`;
-          });
+            }
 
-          // Add summary for this date
-          if (reportType !== "class") {
-            const summaryData = {};
-            let totalAbsencesThisDate = 0;
-
+            // Now add detailed data for this date
             Object.entries(deptsOnDate).forEach(([deptName, classesOnDate]) => {
-              let deptTotal = 0;
+              // Check if entire department is holiday
+              let deptHolidayReason = null;
+              let allDeptHolidays = true;
               Object.entries(classesOnDate).forEach(([className, absences]) => {
-                const classAbsences = absences.length;
-                if (!summaryData[deptName]) {
-                  summaryData[deptName] = {};
-                }
-                summaryData[deptName][className] = classAbsences;
-                deptTotal += classAbsences;
-                totalAbsencesThisDate += classAbsences;
+                absences.forEach((student) => {
+                  if (student.isHoliday) {
+                    deptHolidayReason = student.reason || deptHolidayReason;
+                  } else {
+                    allDeptHolidays = false;
+                  }
+                });
               });
-              summaryData[deptName]["__total"] = deptTotal;
-            });
 
+              if (
+                allDeptHolidays &&
+                deptHolidayReason &&
+                reportType !== "class"
+              ) {
+                printContent += `<div style="padding: 10px; background-color: #ffffcc; border-left: 3px solid #ffcc00; font-weight: 500; font-size: 18px;"><strong>${deptName}: 🔒 Holiday - ${deptHolidayReason}</strong></div>`;
+              } else {
+                printContent += `<div class="department-wrapper">`;
+                printContent += `<div class="department-header">${deptName}</div>`;
+                Object.entries(classesOnDate).forEach(
+                  ([className, absences]) => {
+                    // Check if this class is all holidays
+                    const allClassHolidays = absences.every((s) => s.isHoliday);
+                    const holidayEntry = absences.find((s) => s.isHoliday);
+
+                    printContent += `<div class="class-header">Class: ${className}</div>`;
+                    if (allClassHolidays && holidayEntry) {
+                      printContent += `<div style="padding: 10px; background-color: #ffffcc; border-left: 3px solid #ffcc00; font-size: 16px;">🔒 Holiday - ${holidayEntry.reason}</div>`;
+                    } else if (absences.length > 0) {
+                      printContent += `
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>S No</th>
+                            <th>Roll No</th>
+                            <th>Name</th>
+                            <th>Residence</th>
+                            <th>Absence Reason</th>
+                            <th>Status</th>
+                            <th>Absence Count</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                    `;
+                      absences.forEach((student, idx) => {
+                        let status = "Not Informed";
+                        if (typeof student.informed === "string") {
+                          status =
+                            student.informed.toLowerCase() === "informed"
+                              ? "Informed"
+                              : "Not Informed";
+                        } else if (student.informed === true) {
+                          status = "Informed";
+                        }
+                        printContent += `
+                        <tr>
+                          <td>${idx + 1}</td>
+                          <td>${student.rollNo}</td>
+                          <td>${student.name}</td>
+                          <td>${student.residence || ""}</td>
+                          <td>${student.reason || ""}</td>
+                          <td>${status}</td>
+                          <td>${student.absenceCount || 0}</td>
+                        </tr>
+                      `;
+                      });
+                      printContent += `
+                        </tbody>
+                      </table>
+                    `;
+                    } else {
+                      printContent += `<div class="no-absences">No absences</div>`;
+                    }
+                  },
+                );
+                printContent += `</div>`;
+              }
+            });
+          }
+        });
+      } else {
+        // For specific date - Build summary first, then data
+
+        // Calculate summary data
+        const summaryData = {};
+        let totalInstitutionAbsences = 0;
+
+        Object.entries(report).forEach(([deptName, absencesByClass]) => {
+          let deptTotal = 0;
+          Object.entries(absencesByClass).forEach(([className, absences]) => {
+            // Check if this class is all holidays
+            const allClassHolidays = absences.every((s) => s.isHoliday);
+            const holidayEntry = absences.find((s) => s.isHoliday);
+            const classAbsences = allClassHolidays
+              ? `🔒 ${holidayEntry?.reason || "Holiday"}`
+              : absences.length;
+            if (!summaryData[deptName]) {
+              summaryData[deptName] = {};
+            }
+            summaryData[deptName][className] = classAbsences;
+            if (!allClassHolidays) {
+              deptTotal += absences.length;
+              totalInstitutionAbsences += absences.length;
+            }
+          });
+          summaryData[deptName]["__total"] = deptTotal;
+        });
+
+        // Check if entire institution is on holiday
+        let institutionHolidayReason = null;
+        let allInstitutionHoliday = true;
+        Object.entries(report).forEach(([deptName, absencesByClass]) => {
+          Object.entries(absencesByClass).forEach(([className, absences]) => {
+            absences.forEach((student) => {
+              if (student.isHoliday) {
+                institutionHolidayReason =
+                  student.reason || institutionHolidayReason;
+              } else {
+                allInstitutionHoliday = false;
+              }
+            });
+          });
+        });
+
+        if (
+          allInstitutionHoliday &&
+          institutionHolidayReason &&
+          reportType === "whole"
+        ) {
+          // For whole institution holiday
+          printContent += `<div style="padding: 15px; background-color: #ffffcc; border-left: 3px solid #ffcc00; font-weight: 500; font-size: 20px;">🔒 Holiday - ${institutionHolidayReason}</div>`;
+        } else {
+          // Add summary page first (only if not all institution holiday)
+          if (reportType !== "class") {
             printContent += `
-              <div style="margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
-                <h3 style="margin-top: 0; color: #333;">Summary - ${dateDisplay}</h3>
+              <div class="department-wrapper">
+                <div class="department-header">Summary of Absences</div>
                 <table>
                   <thead>
                     <tr>
@@ -1138,6 +1769,7 @@ export default function AdminDashboard({ user, onLogout }) {
             `;
 
             if (reportType === "whole") {
+              // For whole institution, show all departments, classes, and institution total
               Object.entries(summaryData).forEach(([deptName, classData]) => {
                 const deptTotal = classData["__total"];
                 const classes = Object.entries(classData)
@@ -1145,15 +1777,18 @@ export default function AdminDashboard({ user, onLogout }) {
                   .sort();
 
                 classes.forEach(([className, count], idx) => {
+                  const displayCount =
+                    typeof count === "string" ? count : count;
                   printContent += `
                     <tr>
                       <td>${idx === 0 ? deptName : ""}</td>
                       <td>${className}</td>
-                      <td>${count}</td>
+                      <td>${displayCount}</td>
                     </tr>
                   `;
                 });
 
+                // Add department total row
                 printContent += `
                   <tr style="background-color: #e8e8e8; font-weight: bold;">
                     <td>${deptName} Total</td>
@@ -1163,14 +1798,16 @@ export default function AdminDashboard({ user, onLogout }) {
                 `;
               });
 
+              // Add institution total row
               printContent += `
                 <tr style="background-color: #d0d0d0; font-weight: bold; font-size: 14px;">
-                  <td>Date Total</td>
+                  <td>Institution Total</td>
                   <td></td>
-                  <td>${totalAbsencesThisDate}</td>
+                  <td>${totalInstitutionAbsences}</td>
                 </tr>
               `;
             } else if (reportType === "department") {
+              // For department, show classes and department total
               Object.entries(summaryData).forEach(([deptName, classData]) => {
                 const deptTotal = classData["__total"];
                 const classes = Object.entries(classData)
@@ -1178,15 +1815,18 @@ export default function AdminDashboard({ user, onLogout }) {
                   .sort();
 
                 classes.forEach(([className, count]) => {
+                  const displayCount =
+                    typeof count === "string" ? count : count;
                   printContent += `
                     <tr>
                       <td>${deptName}</td>
                       <td>${className}</td>
-                      <td>${count}</td>
+                      <td>${displayCount}</td>
                     </tr>
                   `;
                 });
 
+                // Add department total row
                 printContent += `
                   <tr style="background-color: #e8e8e8; font-weight: bold;">
                     <td>${deptName} Total</td>
@@ -1203,168 +1843,104 @@ export default function AdminDashboard({ user, onLogout }) {
               </div>
             `;
           }
-        });
-      } else {
-        // For specific date - organize by department and class
-        Object.entries(report).forEach(([deptName, absencesByClass]) => {
-          printContent += `<div class="department-wrapper">`;
-          printContent += `<div class="department-header">${deptName}</div>`;
-          Object.entries(absencesByClass).forEach(([className, absences]) => {
-            printContent += `<div class="class-header">Class: ${className}</div>`;
-            if (absences.length > 0) {
-              printContent += `
-                <table>
-                  <thead>
-                    <tr>
-                      <th>S No</th>
-                      <th>Roll No</th>
-                      <th>Name</th>
-                      <th>Residence</th>
-                      <th>Absence Reason</th>
-                      <th>Status</th>
-                      <th>Leaves Taken</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-              `;
-              absences.forEach((student, idx) => {
-                let status = "Not Informed";
-                if (typeof student.informed === "string") {
-                  status =
-                    student.informed.toLowerCase() === "informed"
-                      ? "Informed"
-                      : "Not Informed";
-                } else if (student.informed === true) {
-                  status = "Informed";
-                }
-                printContent += `
-                  <tr>
-                    <td>${idx + 1}</td>
-                    <td>${student.rollNo}</td>
-                    <td>${student.name}</td>
-                    <td>${student.residence || ""}</td>
-                    <td>${student.reason || ""}</td>
-                    <td>${status}</td>
-                    <td>${student.leavesTaken || 0}</td>
-                  </tr>
-                `;
-              });
-              printContent += `
-                  </tbody>
-                </table>
-              `;
-            } else {
-              printContent += `<div class="no-absences">No absences</div>`;
-            }
-          });
-          printContent += `</div>`;
-        });
 
-        // Build summary page for specific date
-        if (reportType !== "class") {
-          // Calculate absentee counts
-          const summaryData = {};
-          let totalInstitutionAbsences = 0;
+          // Add page break before data
+          printContent += `<div style="page-break-before: always;"></div>`;
 
-          Object.entries(report).forEach(([deptName, absencesByClass]) => {
-            let deptTotal = 0;
-            Object.entries(absencesByClass).forEach(([className, absences]) => {
-              const classAbsences = absences.length;
-              if (!summaryData[deptName]) {
-                summaryData[deptName] = {};
+          // Now add data sections
+          Object.entries(report).forEach(
+            ([deptName, absencesByClass], deptIdx) => {
+              // Add page break before each department (except first)
+              if (deptIdx > 0) {
+                printContent += `<div style="page-break-before: always;"></div>`;
               }
-              summaryData[deptName][className] = classAbsences;
-              deptTotal += classAbsences;
-              totalInstitutionAbsences += classAbsences;
-            });
-            summaryData[deptName]["__total"] = deptTotal;
-          });
 
-          // Add summary page
-          printContent += `
-            <div class="department-wrapper" style="page-break-before: always;">
-              <div class="department-header">Summary of Absences</div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Department</th>
-                    <th>Class</th>
-                    <th>Number of Absentees</th>
-                  </tr>
-                </thead>
-                <tbody>
-          `;
+              // Check if entire department is holiday
+              let deptHolidayReason = null;
+              let allDeptHoliday = true;
+              Object.entries(absencesByClass).forEach(
+                ([className, absences]) => {
+                  absences.forEach((student) => {
+                    if (student.isHoliday) {
+                      deptHolidayReason = student.reason || deptHolidayReason;
+                    } else {
+                      allDeptHoliday = false;
+                    }
+                  });
+                },
+              );
 
-          if (reportType === "whole") {
-            // For whole institution, show all departments, classes, and institution total
-            Object.entries(summaryData).forEach(([deptName, classData]) => {
-              const deptTotal = classData["__total"];
-              const classes = Object.entries(classData)
-                .filter(([key]) => key !== "__total")
-                .sort();
+              if (
+                allDeptHoliday &&
+                deptHolidayReason &&
+                reportType !== "class"
+              ) {
+                // Department is all holiday
+                printContent += `<div style="margin: 40px 0; padding: 30px; background-color: #ffffcc; border-left: 5px solid #ffcc00; border-radius: 4px; font-weight: 500; font-size: 22px; text-align: center;" data-holiday-type="department" data-holiday-reason="${deptHolidayReason}" data-department="${deptName}"><strong>${deptName}: 🔒 Holiday - ${deptHolidayReason}</strong></div>`;
+              } else {
+                printContent += `<div class="department-wrapper">`;
+                printContent += `<div class="department-header">${deptName}</div>`;
+                Object.entries(absencesByClass).forEach(
+                  ([className, absences]) => {
+                    // Check if this class is all holidays
+                    const allClassHolidays = absences.every((s) => s.isHoliday);
+                    const holidayEntry = absences.find((s) => s.isHoliday);
 
-              classes.forEach(([className, count], idx) => {
-                printContent += `
-                  <tr>
-                    <td>${idx === 0 ? deptName : ""}</td>
-                    <td>${className}</td>
-                    <td>${count}</td>
-                  </tr>
-                `;
-              });
-
-              // Add department total row
-              printContent += `
-                <tr style="background-color: #e8e8e8; font-weight: bold;">
-                  <td>${deptName} Total</td>
-                  <td></td>
-                  <td>${deptTotal}</td>
-                </tr>
-              `;
-            });
-
-            // Add institution total row
-            printContent += `
-              <tr style="background-color: #d0d0d0; font-weight: bold; font-size: 14px;">
-                <td>Institution Total</td>
-                <td></td>
-                <td>${totalInstitutionAbsences}</td>
-              </tr>
-            `;
-          } else if (reportType === "department") {
-            // For department, show classes and department total
-            Object.entries(summaryData).forEach(([deptName, classData]) => {
-              const deptTotal = classData["__total"];
-              const classes = Object.entries(classData)
-                .filter(([key]) => key !== "__total")
-                .sort();
-
-              classes.forEach(([className, count]) => {
-                printContent += `
-                  <tr>
-                    <td>${deptName}</td>
-                    <td>${className}</td>
-                    <td>${count}</td>
-                  </tr>
-                `;
-              });
-
-              // Add department total row
-              printContent += `
-                <tr style="background-color: #e8e8e8; font-weight: bold;">
-                  <td>${deptName} Total</td>
-                  <td></td>
-                  <td>${deptTotal}</td>
-                </tr>
-              `;
-            });
-          }
-
-          printContent += `
-                </tbody>
-              </table>
-            </div>
-          `;
+                    printContent += `<div class="class-header">Class: ${className}</div>`;
+                    if (allClassHolidays && holidayEntry) {
+                      printContent += `<div style="padding: 10px; background-color: #ffffcc; border-left: 3px solid #ffcc00; font-size: 16px;" data-holiday-type="class" data-holiday-reason="${holidayEntry.reason}" data-class="${className}">🔒 Holiday - ${holidayEntry.reason}</div>`;
+                    } else if (absences.length > 0) {
+                      printContent += `
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>S No</th>
+                          <th>Roll No</th>
+                          <th>Name</th>
+                          <th>Residence</th>
+                          <th>Absence Reason</th>
+                          <th>Status</th>
+                          <th>Absence Count</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                  `;
+                      absences.forEach((student, idx) => {
+                        let status = "Not Informed";
+                        if (typeof student.informed === "string") {
+                          status =
+                            student.informed.toLowerCase() === "informed"
+                              ? "Informed"
+                              : "Not Informed";
+                        } else if (student.informed === true) {
+                          status = "Informed";
+                        }
+                        const isHolidayRow = student.rollNo === "HOLIDAY";
+                        printContent += `
+                      <tr${isHolidayRow ? ' data-type="holiday" data-holiday-reason="' + (student.reason || "") + '"' : ""}>
+                        <td>${idx + 1}</td>
+                        <td>${student.rollNo}</td>
+                        <td>${student.name}</td>
+                        <td>${student.residence || ""}</td>
+                        <td>${student.reason || ""}</td>
+                        <td>${status}</td>
+                        <td>${student.absenceCount || 0}</td>
+                      </tr>
+                    `;
+                      });
+                      printContent += `
+                      </tbody>
+                    </table>
+                  `;
+                    } else {
+                      printContent += `<div class="no-absences">No absences</div>`;
+                    }
+                  },
+                );
+                printContent += `</div>`;
+              }
+            },
+          );
         }
       }
 
@@ -1426,6 +2002,56 @@ export default function AdminDashboard({ user, onLogout }) {
 
       const workbook = XLSX.utils.book_new();
       const worksheets = {};
+
+      // Calculate summary data first
+      const summaryData = {};
+      let totalAbsences = 0;
+      Object.entries(report).forEach(([deptName, classesByName]) => {
+        let deptTotal = 0;
+        Object.entries(classesByName).forEach(([className, absences]) => {
+          const classAbsences = absences.length;
+          if (!summaryData[deptName]) {
+            summaryData[deptName] = {};
+          }
+          summaryData[deptName][className] = classAbsences;
+          deptTotal += classAbsences;
+          totalAbsences += classAbsences;
+        });
+        summaryData[deptName]["__total"] = deptTotal;
+      });
+
+      // Create summary sheet first
+      const summaryRows = [["Absence Report Summary"]];
+      summaryRows.push(["Generated on", new Date().toLocaleString()]);
+      summaryRows.push(["Report Date", dateStr]);
+      summaryRows.push(["Report Type", reportType]);
+      summaryRows.push([]);
+
+      summaryRows.push(["Department", "Class", "Number of Absentees"]);
+      Object.entries(summaryData).forEach(([deptName, classData]) => {
+        const deptTotal = classData["__total"];
+        const classes = Object.entries(classData)
+          .filter(([key]) => key !== "__total")
+          .sort();
+
+        // Add all classes with department name on each row
+        classes.forEach(([className, count]) => {
+          summaryRows.push([deptName, className, count]);
+        });
+
+        // Add subtotal row with department name (so it filters with the department)
+        summaryRows.push([deptName, "--- Department Total ---", deptTotal]);
+        summaryRows.push([]); // Empty row for visual separation
+      });
+
+      summaryRows.push(["Institution Total", "", totalAbsences]);
+
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
+      summaryWs["!cols"] = [{ wch: 20 }, { wch: 20 }, { wch: 20 }];
+      // Enable auto-filter on summary sheet (header row at row 6: Department, Class, Number of Absentees)
+      summaryWs["!autofilter"] = { ref: "A6:C499" };
+      // Add summary sheet first
+      XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary");
 
       // Create worksheets for each department
       Object.entries(report).forEach(([deptName, classesByName]) => {
@@ -1499,6 +2125,9 @@ export default function AdminDashboard({ user, onLogout }) {
           { wch: 12 },
         ];
 
+        // Enable auto-filter on first class header row (row 4: S No, Roll No, Name, etc.)
+        ws["!autofilter"] = { ref: "A4:G999" };
+
         // Use sanitized department name for sheet name (Excel has limitations)
         const sheetName = deptName
           .substring(0, 31)
@@ -1506,58 +2135,10 @@ export default function AdminDashboard({ user, onLogout }) {
         worksheets[sheetName] = ws;
       });
 
-      // Add all worksheets to workbook
+      // Add all worksheets to workbook (after summary)
       Object.entries(worksheets).forEach(([sheetName, ws]) => {
         XLSX.utils.book_append_sheet(workbook, ws, sheetName);
       });
-
-      // Add summary sheet
-      const summaryRows = [["Absence Report Summary"]];
-      summaryRows.push(["Generated on", new Date().toLocaleString()]);
-      summaryRows.push(["Report Date", dateStr]);
-      summaryRows.push(["Report Type", reportType]);
-      summaryRows.push([]);
-
-      // Calculate summary data
-      const summaryData = {};
-      let totalAbsences = 0;
-      Object.entries(report).forEach(([deptName, classesByName]) => {
-        let deptTotal = 0;
-        Object.entries(classesByName).forEach(([className, absences]) => {
-          const classAbsences = absences.length;
-          if (!summaryData[deptName]) {
-            summaryData[deptName] = {};
-          }
-          summaryData[deptName][className] = classAbsences;
-          deptTotal += classAbsences;
-          totalAbsences += classAbsences;
-        });
-        summaryData[deptName]["__total"] = deptTotal;
-      });
-
-      summaryRows.push(["Department", "Class", "Number of Absentees"]);
-      Object.entries(summaryData).forEach(([deptName, classData]) => {
-        const deptTotal = classData["__total"];
-        const classes = Object.entries(classData)
-          .filter(([key]) => key !== "__total")
-          .sort();
-
-        classes.forEach(([className, count], idx) => {
-          if (idx === 0) {
-            summaryRows.push([deptName, className, count]);
-          } else {
-            summaryRows.push(["", className, count]);
-          }
-        });
-        summaryRows.push([`${deptName} Total`, "", deptTotal]);
-        summaryRows.push([]);
-      });
-
-      summaryRows.push(["Institution Total", "", totalAbsences]);
-
-      const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
-      summaryWs["!cols"] = [{ wch: 20 }, { wch: 20 }, { wch: 20 }];
-      XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary");
 
       // Write file
       XLSX.writeFile(
@@ -1572,7 +2153,8 @@ export default function AdminDashboard({ user, onLogout }) {
 
   // Attendance Lock Management Functions
   const toggleAttendanceLock = async () => {
-    if (!lockDate) {
+    const dateToCheck = lockDateMode === "specific" ? lockDate : lockDateFrom;
+    if (!dateToCheck) {
       alert("Please select a date");
       return;
     }
@@ -1590,6 +2172,11 @@ export default function AdminDashboard({ user, onLogout }) {
       return;
     }
 
+    if (lockDateMode === "range" && !lockDateTo) {
+      alert("Please select an end date for the range");
+      return;
+    }
+
     try {
       const res = await apiCall("/api/attendance-lock/bulk-lock", {
         method: "POST",
@@ -1597,7 +2184,9 @@ export default function AdminDashboard({ user, onLogout }) {
           lockType: lockType, // "whole", "department", or "class"
           departmentId: lockDepartment?.id || null,
           classId: lockClass?.id || null,
-          date: lockDate,
+          date: lockDateMode === "specific" ? lockDate : null,
+          dateFrom: lockDateMode === "range" ? lockDateFrom : null,
+          dateTo: lockDateMode === "range" ? lockDateTo : null,
           isLocked: true,
         }),
       });
@@ -1617,7 +2206,8 @@ export default function AdminDashboard({ user, onLogout }) {
   };
 
   const toggleAttendanceUnlock = async () => {
-    if (!lockDate) {
+    const dateToCheck = lockDateMode === "specific" ? lockDate : lockDateFrom;
+    if (!dateToCheck) {
       alert("Please select a date");
       return;
     }
@@ -1635,6 +2225,11 @@ export default function AdminDashboard({ user, onLogout }) {
       return;
     }
 
+    if (lockDateMode === "range" && !lockDateTo) {
+      alert("Please select an end date for the range");
+      return;
+    }
+
     if (!confirm("Are you sure you want to unlock attendance for this date?")) {
       return;
     }
@@ -1646,7 +2241,9 @@ export default function AdminDashboard({ user, onLogout }) {
           lockType: lockType, // "whole", "department", or "class"
           departmentId: lockDepartment?.id || null,
           classId: lockClass?.id || null,
-          date: lockDate,
+          date: lockDateMode === "specific" ? lockDate : null,
+          dateFrom: lockDateMode === "range" ? lockDateFrom : null,
+          dateTo: lockDateMode === "range" ? lockDateTo : null,
           isLocked: false,
         }),
       });
@@ -1691,6 +2288,172 @@ export default function AdminDashboard({ user, onLogout }) {
     }
   };
 
+  // Holiday Lock Management Functions
+  const toggleHolidayLock = async () => {
+    const dateToCheck =
+      holidayLockDateMode === "specific"
+        ? holidayLockDate
+        : holidayLockDateFrom;
+    if (!dateToCheck) {
+      alert("Please select a date");
+      return;
+    }
+
+    if (!holidayLockReason.trim()) {
+      alert("Please enter a reason for the holiday");
+      return;
+    }
+
+    if (holidayLockType === "class" && !holidayLockClass) {
+      alert("Please select a class");
+      return;
+    }
+
+    if (
+      (holidayLockType === "department" || holidayLockType === "class") &&
+      !holidayLockDepartment
+    ) {
+      alert("Please select a department");
+      return;
+    }
+
+    if (holidayLockDateMode === "range" && !holidayLockDateTo) {
+      alert("Please select an end date for the range");
+      return;
+    }
+
+    try {
+      const res = await apiCall("/api/holiday-lock/bulk-lock", {
+        method: "POST",
+        body: JSON.stringify({
+          lockType: holidayLockType,
+          departmentId: holidayLockDepartment?.id || null,
+          classId: holidayLockClass?.id || null,
+          date: holidayLockDateMode === "specific" ? holidayLockDate : null,
+          dateFrom:
+            holidayLockDateMode === "range" ? holidayLockDateFrom : null,
+          dateTo: holidayLockDateMode === "range" ? holidayLockDateTo : null,
+          reason: holidayLockReason,
+          action: "lock",
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(
+          `Holiday locked successfully for ${data.affectedClasses} class(es)!`,
+        );
+        setHolidayLockReason("");
+        fetchHolidayLockedDates();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to lock holiday: " + error.message);
+    }
+  };
+
+  const toggleHolidayUnlock = async () => {
+    const dateToCheck =
+      holidayLockDateMode === "specific"
+        ? holidayLockDate
+        : holidayLockDateFrom;
+    if (!dateToCheck) {
+      alert("Please select a date");
+      return;
+    }
+
+    if (holidayLockType === "class" && !holidayLockClass) {
+      alert("Please select a class");
+      return;
+    }
+
+    if (
+      (holidayLockType === "department" || holidayLockType === "class") &&
+      !holidayLockDepartment
+    ) {
+      alert("Please select a department");
+      return;
+    }
+
+    if (holidayLockDateMode === "range" && !holidayLockDateTo) {
+      alert("Please select an end date for the range");
+      return;
+    }
+
+    if (!confirm("Are you sure you want to unlock this holiday?")) {
+      return;
+    }
+
+    try {
+      const res = await apiCall("/api/holiday-lock/bulk-lock", {
+        method: "POST",
+        body: JSON.stringify({
+          lockType: holidayLockType,
+          departmentId: holidayLockDepartment?.id || null,
+          classId: holidayLockClass?.id || null,
+          date: holidayLockDateMode === "specific" ? holidayLockDate : null,
+          dateFrom:
+            holidayLockDateMode === "range" ? holidayLockDateFrom : null,
+          dateTo: holidayLockDateMode === "range" ? holidayLockDateTo : null,
+          reason: "N/A",
+          action: "unlock",
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(
+          `Holiday unlocked successfully for ${data.affectedClasses} class(es)!`,
+        );
+        fetchHolidayLockedDates();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to unlock holiday: " + error.message);
+    }
+  };
+
+  const unlockHoliday = async (classId, date) => {
+    if (!confirm("Are you sure you want to unlock this holiday?")) {
+      return;
+    }
+
+    try {
+      const res = await apiCall("/api/holiday-lock", {
+        method: "DELETE",
+        body: JSON.stringify({ classId, date }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Holiday unlocked successfully!");
+        fetchHolidayLockedDates();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to unlock holiday: " + error.message);
+    }
+  };
+
+  const fetchHolidayLockedDates = async () => {
+    if (holidayLockType !== "class" || !holidayLockClass) {
+      setHolidayLockedDates([]);
+      return;
+    }
+
+    try {
+      const res = await apiCall(
+        `/api/holiday-lock?classId=${holidayLockClass.id}&listAll=true`,
+      );
+      const data = await res.json();
+      if (data.success) {
+        setHolidayLockedDates(data.locks || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch holiday locked dates:", error);
+    }
+  };
+
   const fetchLockedDates = async () => {
     // Only fetch for class-level locks
     if (lockType !== "class" || !lockClass) {
@@ -1732,6 +2495,332 @@ export default function AdminDashboard({ user, onLogout }) {
     }
   };
 
+  // Fetch and calculate dashboard statistics
+  useEffect(() => {
+    const fetchDashboardStats = async () => {
+      try {
+        let startDate, endDate;
+        if (dashboardDateMode === "specific") {
+          startDate = dashboardDate;
+          endDate = dashboardDate;
+        } else {
+          startDate = dashboardDateFrom;
+          endDate = dashboardDateTo;
+        }
+
+        // Determine which classes to fetch data for based on type
+        let classesToFetch = [];
+        if (dashboardType === "whole") {
+          // Fetch all classes, optionally filtered by program
+          if (dashboardProgram !== "all") {
+            // If program is selected, fetch departments for that program fresh from API, then their classes
+            const resDepts = await apiCall(
+              `/api/departments?program=${dashboardProgram}`,
+            );
+            const dataDepts = await resDepts.json();
+            let relevantDepts = dataDepts.success ? dataDepts.departments : [];
+
+            // Now fetch classes for all relevant departments in parallel
+            let allClassesForProgram = [];
+            const classPromises = relevantDepts.map((dept) =>
+              apiCall(`/api/classes?departmentId=${dept.id}`).then((res) =>
+                res.json().then((data) =>
+                  data.success
+                    ? data.classes.map((c) => ({
+                        ...c,
+                        departmentId: dept.id,
+                      }))
+                    : [],
+                ),
+              ),
+            );
+            const classResults = await Promise.all(classPromises);
+            allClassesForProgram = classResults.flat();
+            classesToFetch = allClassesForProgram;
+          } else {
+            // No program filter - fetch all classes
+            const res = await apiCall("/api/classes");
+            const data = await res.json();
+            classesToFetch = data.success ? data.classes : [];
+          }
+        } else if (dashboardType === "program" && dashboardProgram !== "all") {
+          // Fetch departments for the selected program fresh from API, then their classes
+          const resDepts = await apiCall(
+            `/api/departments?program=${dashboardProgram}`,
+          );
+          const dataDepts = await resDepts.json();
+          let relevantDepts = dataDepts.success ? dataDepts.departments : [];
+
+          // Now fetch classes for all relevant departments in parallel
+          let allClassesForProgram = [];
+          const classPromises = relevantDepts.map((dept) =>
+            apiCall(`/api/classes?departmentId=${dept.id}`).then((res) =>
+              res
+                .json()
+                .then((data) =>
+                  data.success
+                    ? data.classes.map((c) => ({ ...c, departmentId: dept.id }))
+                    : [],
+                ),
+            ),
+          );
+          const classResults = await Promise.all(classPromises);
+          allClassesForProgram = classResults.flat();
+          classesToFetch = allClassesForProgram;
+        } else if (dashboardType === "department" && dashboardDepartment) {
+          // Fetch classes for the selected department
+          const res = await apiCall(
+            `/api/classes?departmentId=${dashboardDepartment.id}`,
+          );
+          const data = await res.json();
+          if (data.success) {
+            classesToFetch = data.classes.map((c) => ({
+              ...c,
+              departmentId: dashboardDepartment.id,
+            }));
+          }
+        } else if (dashboardType === "class" && dashboardClass) {
+          classesToFetch = [dashboardClass];
+        }
+
+        // Build a set of Sundays ONLY (applies to all classes)
+        const sundayDates = new Set();
+        if (dashboardDateMode === "range") {
+          const [startYear, startMonth, startDay] = startDate
+            .split("-")
+            .map(Number);
+          const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
+          const start = new Date(Date.UTC(startYear, startMonth - 1, startDay));
+          const end = new Date(Date.UTC(endYear, endMonth - 1, endDay));
+
+          let current = new Date(start);
+          while (current <= end) {
+            // Check if it's a Sunday (0 = Sunday in JavaScript)
+            if (current.getUTCDay() === 0) {
+              const sundayStr = current.toISOString().split("T")[0];
+              sundayDates.add(sundayStr);
+            }
+            current.setDate(current.getDate() + 1);
+          }
+        } else if (dashboardDateMode === "specific") {
+          // For specific date, check if it's a Sunday
+          const [year, month, day] = dashboardDate.split("-").map(Number);
+          const dateObj = new Date(Date.UTC(year, month - 1, day));
+          if (dateObj.getUTCDay() === 0) {
+            sundayDates.add(dashboardDate);
+          }
+        }
+
+        // Fetch all students and attendance data
+        let totalStudents = new Set();
+        let studentsFromClassesOnHoliday = new Set(); // Track students whose class is on holiday
+        let totalAbsent = 0;
+        let totalPresent = 0;
+        let totalPresentSum = 0; // For accumulating across all classes
+        let totalAbsentSum = 0; // For accumulating across all classes
+        let studentsNotOnHoliday = 0; // For specific date mode OR TR (Total Records) for date range
+        let dayCount = 0; // Number of days in range (pre-calculated)
+        const distinctDaysSet = new Set(); // Track distinct class days for date range mode
+        const globalDailyStats = {}; // Accumulate daily stats from all classes
+
+        // Calculate number of working days (excluding Sundays ONLY, not class-specific holidays)
+        if (dashboardDateMode === "range") {
+          const [startYear, startMonth, startDay] = startDate
+            .split("-")
+            .map(Number);
+          const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
+          const start = new Date(Date.UTC(startYear, startMonth - 1, startDay));
+          const end = new Date(Date.UTC(endYear, endMonth - 1, endDay));
+
+          let workingDays = 0;
+          const current = new Date(start);
+          while (current <= end) {
+            const dateStr = current.toISOString().split("T")[0];
+            // Only exclude Sundays for institution-wide day count
+            if (!sundayDates.has(dateStr)) {
+              workingDays++;
+            }
+            current.setDate(current.getDate() + 1);
+          }
+          dayCount = workingDays;
+        }
+
+        for (const classItem of classesToFetch) {
+          // Fetch students
+          const resStudents = await apiCall(
+            `/api/students?classId=${classItem.id}`,
+          );
+          const dataStudents = await resStudents.json();
+          const students = dataStudents.success ? dataStudents.students : [];
+
+          // Fetch class-specific holidays
+          const classHolidayDates = new Set(sundayDates); // Start with Sundays
+          try {
+            const resHolidays = await apiCall(
+              `/api/holiday-lock?classId=${classItem.id}&listAll=true`,
+            );
+            const dataHolidays = await resHolidays.json();
+            if (dataHolidays.success && dataHolidays.locks) {
+              dataHolidays.locks.forEach((lock) => {
+                const lockDateStr = lock.date;
+                const startDateStr = startDate;
+                const endDateStr = endDate;
+                if (lockDateStr >= startDateStr && lockDateStr <= endDateStr) {
+                  classHolidayDates.add(lockDateStr);
+                }
+              });
+            }
+          } catch (error) {
+            console.error(
+              "Failed to fetch holidays for class:",
+              classItem.id,
+              error,
+            );
+          }
+
+          // Fetch attendance
+          const resAttendance = await apiCall(
+            `/api/attendance?classId=${classItem.id}&from=${startDate}&to=${endDate}`,
+          );
+          const dataAttendance = await resAttendance.json();
+          const attendanceRecords = dataAttendance.success
+            ? dataAttendance.attendanceRecords
+            : [];
+
+          if (dashboardDateMode === "specific") {
+            // For specific date:
+            // Total Students = students from classes operating on this date (NOT on holiday)
+            // Present/Absent = only those with attendance records
+            // Attendance % = Present / (Total - Holiday Students) * 100
+
+            // Only add students from this class if it's NOT on holiday
+            if (!classHolidayDates.has(dashboardDate)) {
+              students.forEach((s) => totalStudents.add(s.id));
+            } else {
+              // Track students from classes on holiday
+              students.forEach((s) => studentsFromClassesOnHoliday.add(s.id));
+            }
+
+            // Count students with attendance records on this date (not on holiday)
+            const studentsWithRecords = new Set();
+            attendanceRecords.forEach((record) => {
+              studentsWithRecords.add(record.studentId);
+              if (record.status === "absent") {
+                totalAbsent++;
+              } else if (record.status === "present") {
+                totalPresent++;
+              }
+            });
+
+            // Calculate number of students not on holiday for this specific date
+            const classStudentsNotOnHoliday = studentsWithRecords.size;
+            studentsNotOnHoliday += classStudentsNotOnHoliday;
+          } else {
+            // For date range: accumulate daily stats from all classes
+            students.forEach((s) => totalStudents.add(s.id));
+
+            // Accumulate this class's attendance into global daily stats
+            attendanceRecords.forEach((record) => {
+              const dateKey = record.date;
+              // Skip this class's holiday dates (including Sundays)
+              if (classHolidayDates.has(dateKey)) {
+                return;
+              }
+
+              if (!globalDailyStats[dateKey]) {
+                globalDailyStats[dateKey] = { present: 0, absent: 0 };
+                distinctDaysSet.add(dateKey);
+              }
+
+              if (record.status === "absent") {
+                globalDailyStats[dateKey].absent++;
+              } else if (record.status === "present") {
+                globalDailyStats[dateKey].present++;
+              }
+            });
+
+            // Track total records for percentage
+            studentsNotOnHoliday += attendanceRecords.filter(
+              (r) => !classHolidayDates.has(r.date),
+            ).length;
+          }
+        }
+
+        // Calculate final stats for date range
+        if (dashboardDateMode === "range") {
+          const dailyValues = Object.values(globalDailyStats);
+          if (dailyValues.length > 0) {
+            // Sum all daily present/absent counts
+            const totalPresentRecords = dailyValues.reduce(
+              (sum, day) => sum + day.present,
+              0,
+            );
+            const totalAbsentRecords = dailyValues.reduce(
+              (sum, day) => sum + day.absent,
+              0,
+            );
+            // Divide by number of distinct days to get average per day
+            totalPresentSum = totalPresentRecords / dailyValues.length;
+            totalAbsentSum = totalAbsentRecords / dailyValues.length;
+
+            // Store total records for percentage calculation
+            studentsNotOnHoliday = totalPresentRecords + totalAbsentRecords;
+          }
+        }
+
+        // Calculate final stats
+        let avgAttendancePercent = 0;
+        if (dashboardDateMode === "range" && studentsNotOnHoliday > 0) {
+          // Avg Attendance % = (Total Present / Total Records) × 100
+          // We need to calculate from the actual totals, not the averages
+          const dailyValues = Object.values(globalDailyStats);
+          if (dailyValues.length > 0) {
+            const totalPresentRecords = dailyValues.reduce(
+              (sum, day) => sum + day.present,
+              0,
+            );
+            const totalAbsentRecords = dailyValues.reduce(
+              (sum, day) => sum + day.absent,
+              0,
+            );
+            const totalRecords = totalPresentRecords + totalAbsentRecords;
+            if (totalRecords > 0) {
+              avgAttendancePercent = (totalPresentRecords / totalRecords) * 100;
+            }
+          }
+        }
+
+        const newStats = {
+          totalStudents: totalStudents.size,
+          studentsFromClassesOnHoliday: studentsFromClassesOnHoliday.size,
+          present: totalPresent,
+          absent: totalAbsent,
+          studentsNotOnHoliday: studentsNotOnHoliday,
+          avgPresent: totalPresentSum, // Already calculated as average per day
+          avgAbsent: totalAbsentSum, // Already calculated as average per day
+          avgAttendancePercent: avgAttendancePercent,
+        };
+
+        setDashboardStats(newStats);
+      } catch (error) {
+        console.error("Failed to fetch dashboard stats:", error);
+      }
+    };
+
+    fetchDashboardStats();
+  }, [
+    dashboardDateMode,
+    dashboardDate,
+    dashboardDateFrom,
+    dashboardDateTo,
+    dashboardType,
+    dashboardProgram,
+    dashboardDepartment,
+    dashboardClass,
+    classes,
+    departments,
+  ]);
+
   return (
     <div className="attendance-container">
       <div className="attendance-card">
@@ -1746,6 +2835,12 @@ export default function AdminDashboard({ user, onLogout }) {
         </div>
 
         <div className="admin-nav">
+          <button
+            className={`nav-btn ${activeTab === "dashboard" ? "active" : ""}`}
+            onClick={() => setActiveTab("dashboard")}
+          >
+            Dashboard
+          </button>
           <button
             className={`nav-btn ${activeTab === "management" ? "active" : ""}`}
             onClick={() => setActiveTab("management")}
@@ -1771,6 +2866,329 @@ export default function AdminDashboard({ user, onLogout }) {
             Attendance Lock
           </button>
         </div>
+
+        {/* Dashboard Tab */}
+        {activeTab === "dashboard" && (
+          <div className="admin-section">
+            <h2>Dashboard</h2>
+
+            {/* Date Selection */}
+            <div
+              style={{
+                backgroundColor: "#f9f9f9",
+                padding: "15px",
+                borderRadius: "4px",
+                marginBottom: "20px",
+                display: "flex",
+                gap: "10px",
+                alignItems: "flex-start",
+              }}
+            >
+              <select
+                value={dashboardDateMode}
+                onChange={(e) => setDashboardDateMode(e.target.value)}
+                style={{
+                  padding: "8px",
+                  borderRadius: "4px",
+                  border: "1px solid #ddd",
+                  minWidth: "150px",
+                }}
+              >
+                <option value="range">Date Range</option>
+                <option value="specific">Specific Date</option>
+              </select>
+
+              {dashboardDateMode === "range" && (
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "10px",
+                    alignItems: "center",
+                    flex: 1,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <label style={{ fontWeight: "500", minWidth: "60px" }}>
+                      From:
+                    </label>
+                    <input
+                      type="date"
+                      value={dashboardDateFrom}
+                      onChange={(e) => setDashboardDateFrom(e.target.value)}
+                      style={{
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid #ddd",
+                        width: "180px",
+                      }}
+                    />
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <label style={{ fontWeight: "500", minWidth: "40px" }}>
+                      To:
+                    </label>
+                    <input
+                      type="date"
+                      value={dashboardDateTo}
+                      onChange={(e) => setDashboardDateTo(e.target.value)}
+                      style={{
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid #ddd",
+                        width: "180px",
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {dashboardDateMode === "specific" && (
+                <input
+                  type="date"
+                  value={dashboardDate}
+                  onChange={(e) => setDashboardDate(e.target.value)}
+                  style={{
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #ddd",
+                    width: "180px",
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Hierarchy Selection */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: "15px",
+                marginBottom: "20px",
+              }}
+            >
+              {/* Type Selector */}
+              <div>
+                <label
+                  style={{
+                    fontWeight: "bold",
+                    display: "block",
+                    marginBottom: "5px",
+                  }}
+                >
+                  Report Type:
+                </label>
+                <select
+                  value={dashboardType}
+                  onChange={(e) => {
+                    setDashboardType(e.target.value);
+                    setDashboardDepartment(null);
+                    setDashboardClass(null);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #ddd",
+                  }}
+                >
+                  <option value="whole">Whole Institution</option>
+                  <option value="department">By Department</option>
+                  <option value="class">By Class</option>
+                </select>
+              </div>
+
+              {/* Program Selector */}
+              <div>
+                <label
+                  style={{
+                    fontWeight: "bold",
+                    display: "block",
+                    marginBottom: "5px",
+                  }}
+                >
+                  Select Program:
+                </label>
+                <select
+                  value={dashboardProgram}
+                  onChange={(e) => {
+                    setDashboardProgram(e.target.value);
+                    setDashboardDepartment(null);
+                    setDashboardClass(null);
+                  }}
+                  style={{
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #ddd",
+                    width: "100%",
+                  }}
+                >
+                  <option value="all">All Programs</option>
+                  {programs.map((program) => (
+                    <option key={program.id} value={program.name}>
+                      {program.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Department Filter - shows for department and class types */}
+              {(dashboardType === "department" ||
+                dashboardType === "class") && (
+                <div>
+                  <label
+                    style={{
+                      fontWeight: "bold",
+                      display: "block",
+                      marginBottom: "5px",
+                    }}
+                  >
+                    Select Department:
+                  </label>
+                  <select
+                    value={dashboardDepartment?.id || ""}
+                    onChange={(e) => {
+                      const dept = dashboardDepartments.find(
+                        (d) => d.id === parseInt(e.target.value),
+                      );
+                      setDashboardDepartment(dept || null);
+                      if (dashboardType === "class") {
+                        setDashboardClass(null);
+                      }
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                    }}
+                  >
+                    <option value="">-- Select Department --</option>
+                    {dashboardDepartments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Class Filter - only shows when type is class and department is selected */}
+              {dashboardType === "class" && dashboardDepartment && (
+                <div>
+                  <label
+                    style={{
+                      fontWeight: "bold",
+                      display: "block",
+                      marginBottom: "5px",
+                    }}
+                  >
+                    Select Class:
+                  </label>
+                  <select
+                    value={dashboardClass?.id || ""}
+                    onChange={(e) => {
+                      const cls = dashboardClasses.find(
+                        (c) => c.id === parseInt(e.target.value),
+                      );
+                      setDashboardClass(cls || null);
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                    }}
+                  >
+                    <option value="">-- Select Class --</option>
+                    {dashboardClasses.map((cls) => (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="dashboard-stats">
+              {dashboardDateMode === "specific" ? (
+                <>
+                  <div className="stat-card">
+                    <h3>Total Student</h3>
+                    <p className="stat-number">
+                      {dashboardStats.studentsFromClassesOnHoliday === 0
+                        ? dashboardStats.totalStudents
+                        : dashboardStats.totalStudents === 0
+                          ? 0
+                          : `${dashboardStats.totalStudents} + ${dashboardStats.studentsFromClassesOnHoliday}`}
+                    </p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>Present</h3>
+                    <p className="stat-number">{dashboardStats.present}</p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>Absent</h3>
+                    <p className="stat-number">{dashboardStats.absent}</p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>Attendance %</h3>
+                    <p className="stat-number">
+                      {dashboardStats.studentsNotOnHoliday > 0
+                        ? (
+                            (dashboardStats.present /
+                              dashboardStats.studentsNotOnHoliday) *
+                            100
+                          ).toFixed(2)
+                        : 0}
+                      %
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="stat-card">
+                    <h3>Total Student</h3>
+                    <p className="stat-number">
+                      {dashboardStats.totalStudents}
+                    </p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>Avg Present</h3>
+                    <p className="stat-number">
+                      {dashboardStats.avgPresent.toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>Avg Absent</h3>
+                    <p className="stat-number">
+                      {dashboardStats.avgAbsent.toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>Avg Attendance %</h3>
+                    <p className="stat-number">
+                      {(dashboardStats.avgAttendancePercent || 0).toFixed(2)}%
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Management Tab */}
         {activeTab === "management" && (
@@ -2685,174 +4103,63 @@ export default function AdminDashboard({ user, onLogout }) {
           <div className="admin-section">
             <h2>Attendance Lock Management</h2>
 
-            {/* Grid Layout for Selectors */}
+            {/* Sub-tabs for Attendance and Holiday Locks */}
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "15px",
+                display: "flex",
+                gap: "10px",
                 marginBottom: "20px",
+                borderBottom: "2px solid #ddd",
+                paddingBottom: "10px",
               }}
             >
-              {/* Lock Type Selector */}
-              <div>
-                <label
-                  style={{
-                    fontWeight: "bold",
-                    display: "block",
-                    marginBottom: "5px",
-                  }}
-                >
-                  Lock Scope:
-                </label>
-                <select
-                  value={lockType}
-                  onChange={(e) => {
-                    setLockType(e.target.value);
-                    setLockDepartment(null);
-                    setLockClass(null);
-                  }}
-                  style={{
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #ddd",
-                    width: "100%",
-                  }}
-                >
-                  <option value="whole">Whole Institution</option>
-                  <option value="department">By Department</option>
-                  <option value="class">By Class</option>
-                </select>
-              </div>
-
-              {/* Program Selector */}
-              <div>
-                <label
-                  style={{
-                    fontWeight: "bold",
-                    display: "block",
-                    marginBottom: "5px",
-                  }}
-                >
-                  Select Program:
-                </label>
-                <select
-                  value={lockProgram || "all"}
-                  onChange={(e) => {
-                    setLockProgram(e.target.value);
-                    setLockDepartment(null);
-                    setLockClass(null);
-                  }}
-                  style={{
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #ddd",
-                    width: "100%",
-                  }}
-                >
-                  <option value="all">All Programs</option>
-                  {programs.map((prog) => (
-                    <option key={prog.id} value={prog.name}>
-                      {prog.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Department Selector - shows for department and class types */}
-              {(lockType === "department" || lockType === "class") &&
-                lockProgram && (
-                  <div>
-                    <label
-                      style={{
-                        fontWeight: "bold",
-                        display: "block",
-                        marginBottom: "5px",
-                      }}
-                    >
-                      Select Department:
-                    </label>
-                    <select
-                      value={lockDepartment?.id || ""}
-                      onChange={(e) => {
-                        const dept = lockDepartments.find(
-                          (d) => d.id === parseInt(e.target.value),
-                        );
-                        setLockDepartment(dept || null);
-                        if (lockType === "class") {
-                          setLockClass(null);
-                        }
-                      }}
-                      style={{
-                        padding: "8px",
-                        borderRadius: "4px",
-                        border: "1px solid #ddd",
-                        width: "100%",
-                      }}
-                    >
-                      <option value="">-- Select Department --</option>
-                      {lockDepartments.map((dept) => (
-                        <option key={dept.id} value={dept.id}>
-                          {dept.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-              {/* Class Selector - only shows when type is class and department is selected */}
-              {lockType === "class" && lockDepartment && (
-                <div>
-                  <label
-                    style={{
-                      fontWeight: "bold",
-                      display: "block",
-                      marginBottom: "5px",
-                    }}
-                  >
-                    Select Class:
-                  </label>
-                  <select
-                    value={lockClass?.id || ""}
-                    onChange={(e) => {
-                      const cls = lockClasses.find(
-                        (c) => c.id === parseInt(e.target.value),
-                      );
-                      setLockClass(cls || null);
-                    }}
-                    style={{
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #ddd",
-                      width: "100%",
-                    }}
-                  >
-                    <option value="">-- Select Class --</option>
-                    {lockClasses.map((cls) => (
-                      <option key={cls.id} value={cls.id}>
-                        {cls.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <button
+                onClick={() => setLockManagementSubTab("attendance")}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor:
+                    lockManagementSubTab === "attendance"
+                      ? "#007bff"
+                      : "#f0f0f0",
+                  color:
+                    lockManagementSubTab === "attendance" ? "white" : "#333",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontWeight: "500",
+                }}
+              >
+                Attendance Lock
+              </button>
+              <button
+                onClick={() => setLockManagementSubTab("holiday")}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor:
+                    lockManagementSubTab === "holiday" ? "#007bff" : "#f0f0f0",
+                  color: lockManagementSubTab === "holiday" ? "white" : "#333",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontWeight: "500",
+                }}
+              >
+                Holiday Lock
+              </button>
             </div>
 
-            {/* Date Selector and Lock Controls */}
-            {(lockType === "whole" ||
-              (lockProgram &&
-                ((lockType === "department" && lockDepartment) ||
-                  (lockType === "class" && lockClass)))) && (
-              <div style={{ marginBottom: "20px" }}>
+            {lockManagementSubTab === "attendance" && (
+              <>
+                {/* Grid Layout for Selectors */}
                 <div
                   style={{
                     display: "grid",
                     gridTemplateColumns: "1fr 1fr",
                     gap: "15px",
-                    marginBottom: "15px",
+                    marginBottom: "20px",
                   }}
                 >
-                  {/* Date Input */}
+                  {/* Lock Type Selector */}
                   <div>
                     <label
                       style={{
@@ -2861,336 +4168,1030 @@ export default function AdminDashboard({ user, onLogout }) {
                         marginBottom: "5px",
                       }}
                     >
-                      Select Date:
+                      Lock Scope:
                     </label>
-                    <input
-                      type="date"
-                      value={lockDate}
-                      onChange={(e) => setLockDate(e.target.value)}
+                    <select
+                      value={lockType}
+                      onChange={(e) => {
+                        setLockType(e.target.value);
+                        setLockDepartment(null);
+                        setLockClass(null);
+                      }}
                       style={{
-                        width: "100%",
                         padding: "8px",
                         borderRadius: "4px",
                         border: "1px solid #ddd",
+                        width: "100%",
                       }}
-                    />
+                    >
+                      <option value="whole">Whole Institution</option>
+                      <option value="department">By Department</option>
+                      <option value="class">By Class</option>
+                    </select>
                   </div>
+
+                  {/* Program Selector */}
+                  <div>
+                    <label
+                      style={{
+                        fontWeight: "bold",
+                        display: "block",
+                        marginBottom: "5px",
+                      }}
+                    >
+                      Select Program:
+                    </label>
+                    <select
+                      value={lockProgram || "all"}
+                      onChange={(e) => {
+                        setLockProgram(e.target.value);
+                        setLockDepartment(null);
+                        setLockClass(null);
+                      }}
+                      style={{
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid #ddd",
+                        width: "100%",
+                      }}
+                    >
+                      <option value="all">All Programs</option>
+                      {programs.map((prog) => (
+                        <option key={prog.id} value={prog.name}>
+                          {prog.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Department Selector - shows for department and class types */}
+                  {(lockType === "department" || lockType === "class") &&
+                    lockProgram && (
+                      <div>
+                        <label
+                          style={{
+                            fontWeight: "bold",
+                            display: "block",
+                            marginBottom: "5px",
+                          }}
+                        >
+                          Select Department:
+                        </label>
+                        <select
+                          value={lockDepartment?.id || ""}
+                          onChange={(e) => {
+                            const dept = lockDepartments.find(
+                              (d) => d.id === parseInt(e.target.value),
+                            );
+                            setLockDepartment(dept || null);
+                            if (lockType === "class") {
+                              setLockClass(null);
+                            }
+                          }}
+                          style={{
+                            padding: "8px",
+                            borderRadius: "4px",
+                            border: "1px solid #ddd",
+                            width: "100%",
+                          }}
+                        >
+                          <option value="">-- Select Department --</option>
+                          {lockDepartments.map((dept) => (
+                            <option key={dept.id} value={dept.id}>
+                              {dept.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                  {/* Class Selector - only shows when type is class and department is selected */}
+                  {lockType === "class" && lockDepartment && (
+                    <div>
+                      <label
+                        style={{
+                          fontWeight: "bold",
+                          display: "block",
+                          marginBottom: "5px",
+                        }}
+                      >
+                        Select Class:
+                      </label>
+                      <select
+                        value={lockClass?.id || ""}
+                        onChange={(e) => {
+                          const cls = lockClasses.find(
+                            (c) => c.id === parseInt(e.target.value),
+                          );
+                          setLockClass(cls || null);
+                        }}
+                        style={{
+                          padding: "8px",
+                          borderRadius: "4px",
+                          border: "1px solid #ddd",
+                          width: "100%",
+                        }}
+                      >
+                        <option value="">-- Select Class --</option>
+                        {lockClasses.map((cls) => (
+                          <option key={cls.id} value={cls.id}>
+                            {cls.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
 
-                {/* Lock/Unlock Buttons */}
-                <div
+                {/* Date Selector and Lock Controls */}
+                {(lockType === "whole" ||
+                  (lockProgram &&
+                    ((lockType === "department" && lockDepartment) ||
+                      (lockType === "class" && lockClass)))) && (
+                  <div style={{ marginBottom: "20px" }}>
+                    <div style={{ marginBottom: "15px" }}>
+                      <label
+                        style={{
+                          fontWeight: "bold",
+                          display: "block",
+                          marginBottom: "5px",
+                        }}
+                      >
+                        Select Date:
+                      </label>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "10px",
+                          alignItems: "flex-start",
+                        }}
+                      >
+                        <select
+                          value={lockDateMode}
+                          onChange={(e) => setLockDateMode(e.target.value)}
+                          style={{
+                            padding: "8px",
+                            borderRadius: "4px",
+                            border: "1px solid #ddd",
+                            minWidth: "150px",
+                          }}
+                        >
+                          <option value="range">Date Range</option>
+                          <option value="specific">Specific Date</option>
+                        </select>
+
+                        {lockDateMode === "range" && (
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "10px",
+                              alignItems: "center",
+                              flex: 1,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px",
+                              }}
+                            >
+                              <label
+                                style={{ fontWeight: "500", minWidth: "60px" }}
+                              >
+                                From:
+                              </label>
+                              <input
+                                type="date"
+                                value={lockDateFrom}
+                                onChange={(e) =>
+                                  setLockDateFrom(e.target.value)
+                                }
+                                style={{
+                                  padding: "8px",
+                                  borderRadius: "4px",
+                                  border: "1px solid #ddd",
+                                  width: "180px",
+                                }}
+                              />
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px",
+                              }}
+                            >
+                              <label
+                                style={{ fontWeight: "500", minWidth: "40px" }}
+                              >
+                                To:
+                              </label>
+                              <input
+                                type="date"
+                                value={lockDateTo}
+                                onChange={(e) => setLockDateTo(e.target.value)}
+                                style={{
+                                  padding: "8px",
+                                  borderRadius: "4px",
+                                  border: "1px solid #ddd",
+                                  width: "180px",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {lockDateMode === "specific" && (
+                          <input
+                            type="date"
+                            value={lockDate}
+                            onChange={(e) => setLockDate(e.target.value)}
+                            style={{
+                              padding: "8px",
+                              borderRadius: "4px",
+                              border: "1px solid #ddd",
+                              width: "180px",
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Lock/Unlock Buttons */}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        marginBottom: "20px",
+                      }}
+                    >
+                      <button
+                        onClick={() => toggleAttendanceLock()}
+                        disabled={isCurrentDateLocked}
+                        className="export-btn"
+                        style={{
+                          backgroundColor: isCurrentDateLocked
+                            ? "#bdc3c7"
+                            : "#3498db",
+                          cursor: isCurrentDateLocked
+                            ? "not-allowed"
+                            : "pointer",
+                          opacity: isCurrentDateLocked ? 0.6 : 1,
+                        }}
+                      >
+                        {isCurrentDateLocked
+                          ? `✓ ${lockType === "whole" ? "Institution" : lockType === "department" ? "Department" : "Class"} Locked`
+                          : `Lock ${lockType === "whole" ? "Institution" : lockType === "department" ? "Department" : "Class"}`}
+                      </button>
+                      <button
+                        onClick={() => toggleAttendanceUnlock()}
+                        disabled={!isCurrentDateLocked}
+                        className="export-btn"
+                        style={{
+                          backgroundColor: !isCurrentDateLocked
+                            ? "#bdc3c7"
+                            : "#e74c3c",
+                          cursor: !isCurrentDateLocked
+                            ? "not-allowed"
+                            : "pointer",
+                          opacity: !isCurrentDateLocked ? 0.6 : 1,
+                        }}
+                      >
+                        Unlock{" "}
+                        {lockType === "whole"
+                          ? "Institution"
+                          : lockType === "department"
+                            ? "Department"
+                            : "Class"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === "attendance-lock" &&
+              lockManagementSubTab === "holiday" && (
+                <>
+                  <h2>Holiday Lock Management</h2>
+
+                  {/* Select Date - Full Width Row - MOVED TO TOP */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "10px",
+                      alignItems: "center",
+                      marginBottom: "20px",
+                      padding: "15px",
+                      backgroundColor: "#f8f9fa",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                    }}
+                  >
+                    <label
+                      style={{
+                        fontWeight: "bold",
+                        minWidth: "120px",
+                      }}
+                    >
+                      Select Date:
+                    </label>
+                    <select
+                      value={holidayLockDateMode}
+                      onChange={(e) => setHolidayLockDateMode(e.target.value)}
+                      style={{
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid #ddd",
+                        minWidth: "150px",
+                      }}
+                    >
+                      <option value="range">Date Range</option>
+                      <option value="specific">Specific Date</option>
+                    </select>
+
+                    {holidayLockDateMode === "range" && (
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "10px",
+                          alignItems: "center",
+                          flex: 1,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                          }}
+                        >
+                          <label
+                            style={{ fontWeight: "500", minWidth: "60px" }}
+                          >
+                            From:
+                          </label>
+                          <input
+                            type="date"
+                            value={holidayLockDateFrom}
+                            onChange={(e) =>
+                              setHolidayLockDateFrom(e.target.value)
+                            }
+                            style={{
+                              padding: "8px",
+                              borderRadius: "4px",
+                              border: "1px solid #ddd",
+                              width: "180px",
+                            }}
+                          />
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                          }}
+                        >
+                          <label
+                            style={{ fontWeight: "500", minWidth: "40px" }}
+                          >
+                            To:
+                          </label>
+                          <input
+                            type="date"
+                            value={holidayLockDateTo}
+                            onChange={(e) =>
+                              setHolidayLockDateTo(e.target.value)
+                            }
+                            style={{
+                              padding: "8px",
+                              borderRadius: "4px",
+                              border: "1px solid #ddd",
+                              width: "180px",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {holidayLockDateMode === "specific" && (
+                      <input
+                        type="date"
+                        value={holidayLockDate}
+                        onChange={(e) => setHolidayLockDate(e.target.value)}
+                        style={{
+                          padding: "8px",
+                          borderRadius: "4px",
+                          border: "1px solid #ddd",
+                          width: "180px",
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Grid Layout for Selectors */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "15px",
+                      marginBottom: "20px",
+                    }}
+                  >
+                    {/* Lock Type Selector */}
+                    <div>
+                      <label
+                        style={{
+                          fontWeight: "bold",
+                          display: "block",
+                          marginBottom: "5px",
+                        }}
+                      >
+                        Lock Scope:
+                      </label>
+                      <select
+                        value={holidayLockType}
+                        onChange={(e) => {
+                          setHolidayLockType(e.target.value);
+                          setHolidayLockDepartment(null);
+                          setHolidayLockClass(null);
+                        }}
+                        style={{
+                          padding: "8px",
+                          borderRadius: "4px",
+                          border: "1px solid #ddd",
+                          width: "100%",
+                        }}
+                      >
+                        <option value="whole">Whole Institution</option>
+                        <option value="department">By Department</option>
+                        <option value="class">By Class</option>
+                      </select>
+                    </div>
+
+                    {/* Program Selector */}
+                    <div>
+                      <label
+                        style={{
+                          fontWeight: "bold",
+                          display: "block",
+                          marginBottom: "5px",
+                        }}
+                      >
+                        Select Program:
+                      </label>
+                      <select
+                        value={holidayLockProgram || "all"}
+                        onChange={(e) => {
+                          setHolidayLockProgram(e.target.value);
+                          setHolidayLockDepartment(null);
+                          setHolidayLockClass(null);
+                        }}
+                        style={{
+                          padding: "8px",
+                          borderRadius: "4px",
+                          border: "1px solid #ddd",
+                          width: "100%",
+                        }}
+                      >
+                        <option value="all">All Programs</option>
+                        {programs.map((prog) => (
+                          <option key={prog.id} value={prog.name}>
+                            {prog.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Department Selector */}
+                    {(holidayLockType === "department" ||
+                      holidayLockType === "class") &&
+                      holidayLockProgram && (
+                        <div>
+                          <label
+                            style={{
+                              fontWeight: "bold",
+                              display: "block",
+                              marginBottom: "5px",
+                            }}
+                          >
+                            Select Department:
+                          </label>
+                          <select
+                            value={holidayLockDepartment?.id || ""}
+                            onChange={(e) => {
+                              const dept = holidayLockDepartments.find(
+                                (d) => d.id === parseInt(e.target.value),
+                              );
+                              setHolidayLockDepartment(dept || null);
+                              if (holidayLockType === "class") {
+                                setHolidayLockClass(null);
+                              }
+                            }}
+                            style={{
+                              padding: "8px",
+                              borderRadius: "4px",
+                              border: "1px solid #ddd",
+                              width: "100%",
+                            }}
+                          >
+                            <option value="">-- Select Department --</option>
+                            {holidayLockDepartments.map((dept) => (
+                              <option key={dept.id} value={dept.id}>
+                                {dept.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                    {/* Class Selector */}
+                    {holidayLockType === "class" && holidayLockDepartment && (
+                      <div>
+                        <label
+                          style={{
+                            fontWeight: "bold",
+                            display: "block",
+                            marginBottom: "5px",
+                          }}
+                        >
+                          Select Class:
+                        </label>
+                        <select
+                          value={holidayLockClass?.id || ""}
+                          onChange={(e) => {
+                            const cls = holidayLockClasses.find(
+                              (c) => c.id === parseInt(e.target.value),
+                            );
+                            setHolidayLockClass(cls || null);
+                          }}
+                          style={{
+                            padding: "8px",
+                            borderRadius: "4px",
+                            border: "1px solid #ddd",
+                            width: "100%",
+                          }}
+                        >
+                          <option value="">-- Select Class --</option>
+                          {holidayLockClasses.map((cls) => (
+                            <option key={cls.id} value={cls.id}>
+                              {cls.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Reason Input */}
+                    <div>
+                      <label
+                        style={{
+                          fontWeight: "bold",
+                          display: "block",
+                          marginBottom: "5px",
+                        }}
+                      >
+                        Reason for Holiday:
+                      </label>
+                      <input
+                        type="text"
+                        value={holidayLockReason}
+                        onChange={(e) => setHolidayLockReason(e.target.value)}
+                        placeholder="e.g., National Holiday, Festival"
+                        maxLength="200"
+                        style={{
+                          padding: "8px",
+                          borderRadius: "4px",
+                          border: "1px solid #ddd",
+                          width: "100%",
+                        }}
+                      />
+                    </div>
+
+                    {/* Lock/Unlock Buttons - Removed, now at top */}
+                  </div>
+
+                  {/* Action Buttons Row - MOVED TO BOTTOM */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "10px",
+                      marginTop: "30px",
+                      marginBottom: "30px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button
+                      onClick={() => toggleHolidayLock()}
+                      className="export-btn"
+                      style={{ backgroundColor: "#e74c3c" }}
+                    >
+                      🔒 Lock Holiday
+                    </button>
+                    <button
+                      onClick={() => toggleHolidayUnlock()}
+                      className="export-btn"
+                      style={{ backgroundColor: "#27ae60" }}
+                    >
+                      🔓 Unlock Holiday
+                    </button>
+                  </div>
+
+                  {/* View Existing Holiday Locks */}
+                  {holidayLockType === "class" && holidayLockClass && (
+                    <div style={{ marginTop: "30px" }}>
+                      <h3>Existing Holiday Locks</h3>
+                      {holidayLockedDates.length > 0 ? (
+                        <table
+                          style={{
+                            width: "100%",
+                            borderCollapse: "collapse",
+                            marginTop: "15px",
+                          }}
+                        >
+                          <thead>
+                            <tr style={{ backgroundColor: "#ecf0f1" }}>
+                              <th
+                                style={{
+                                  padding: "10px",
+                                  textAlign: "left",
+                                  borderBottom: "2px solid #bdc3c7",
+                                }}
+                              >
+                                Date
+                              </th>
+                              <th
+                                style={{
+                                  padding: "10px",
+                                  textAlign: "left",
+                                  borderBottom: "2px solid #bdc3c7",
+                                }}
+                              >
+                                Reason
+                              </th>
+                              <th
+                                style={{
+                                  padding: "10px",
+                                  textAlign: "left",
+                                  borderBottom: "2px solid #bdc3c7",
+                                }}
+                              >
+                                Locked By
+                              </th>
+                              <th
+                                style={{
+                                  padding: "10px",
+                                  textAlign: "center",
+                                  borderBottom: "2px solid #bdc3c7",
+                                }}
+                              >
+                                Action
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {holidayLockedDates
+                              .filter((lock) => {
+                                // Filter out Sundays (reason === "Sunday")
+                                return lock.reason !== "Sunday";
+                              })
+                              .map((lock) => (
+                                <tr
+                                  key={lock.date}
+                                  style={{ borderBottom: "1px solid #ecf0f1" }}
+                                >
+                                  <td style={{ padding: "10px" }}>
+                                    {lock.date}
+                                  </td>
+                                  <td style={{ padding: "10px" }}>
+                                    {lock.reason}
+                                  </td>
+                                  <td style={{ padding: "10px" }}>
+                                    {lock.lockedBy}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "10px",
+                                      textAlign: "center",
+                                    }}
+                                  >
+                                    <button
+                                      onClick={() =>
+                                        unlockHoliday(
+                                          holidayLockClass.id,
+                                          lock.date,
+                                        )
+                                      }
+                                      style={{
+                                        padding: "5px 10px",
+                                        backgroundColor: "#e74c3c",
+                                        color: "white",
+                                        border: "none",
+                                        borderRadius: "4px",
+                                        cursor: "pointer",
+                                        fontSize: "12px",
+                                      }}
+                                    >
+                                      Unlock
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <p style={{ color: "#7f8c8d", marginTop: "15px" }}>
+                          No holiday locks for this class
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+          </div>
+        )}
+
+        {/* Modal for lock confirmation */}
+        {showLockConfirmModal && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: 1000,
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: "white",
+                borderRadius: "8px",
+                padding: "30px",
+                maxWidth: "500px",
+                width: "90%",
+                boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+              }}
+            >
+              <h2
+                style={{ marginTop: 0, color: "#3498db", marginBottom: "20px" }}
+              >
+                🔒 Lock Attendance
+              </h2>
+              <p
+                style={{
+                  color: "#666",
+                  marginBottom: "20px",
+                  fontSize: "14px",
+                }}
+              >
+                Do you want to lock attendance for{" "}
+                <strong>
+                  {reportType === "whole"
+                    ? "the Whole Institution"
+                    : reportType === "department"
+                      ? `Department: ${reportDepartment?.name || "Selected Department"}`
+                      : `Class: ${reportClass?.name || "Selected Class"}`}
+                </strong>{" "}
+                before{" "}
+                {lockConfirmAction === "print" ? "printing" : "exporting"} the
+                report?
+              </p>
+              <p
+                style={{
+                  color: "#999",
+                  fontSize: "13px",
+                  marginBottom: "20px",
+                }}
+              >
+                Locking will prevent further modifications to attendance records
+                for the selected date.
+              </p>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "10px",
+                }}
+              >
+                <button
+                  onClick={() => {
+                    setShowLockConfirmModal(false);
+                    // Proceed without locking
+                    if (lockConfirmAction === "print") {
+                      handleLockConfirmAndPrint();
+                    } else {
+                      handleLockConfirmAndExport();
+                    }
+                  }}
                   style={{
-                    display: "flex",
-                    gap: "10px",
-                    marginBottom: "20px",
+                    padding: "10px 20px",
+                    border: "1px solid #bdc3c7",
+                    borderRadius: "4px",
+                    backgroundColor: "#ecf0f1",
+                    color: "#333",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500",
                   }}
                 >
-                  <button
-                    onClick={() => toggleAttendanceLock()}
-                    disabled={isCurrentDateLocked}
-                    className="export-btn"
-                    style={{
-                      backgroundColor: isCurrentDateLocked
-                        ? "#bdc3c7"
-                        : "#3498db",
-                      cursor: isCurrentDateLocked ? "not-allowed" : "pointer",
-                      opacity: isCurrentDateLocked ? 0.6 : 1,
-                    }}
-                  >
-                    {isCurrentDateLocked
-                      ? `✓ ${lockType === "whole" ? "Institution" : lockType === "department" ? "Department" : "Class"} Locked`
-                      : `Lock ${lockType === "whole" ? "Institution" : lockType === "department" ? "Department" : "Class"}`}
-                  </button>
-                  <button
-                    onClick={() => toggleAttendanceUnlock()}
-                    disabled={!isCurrentDateLocked}
-                    className="export-btn"
-                    style={{
-                      backgroundColor: !isCurrentDateLocked
-                        ? "#bdc3c7"
-                        : "#e74c3c",
-                      cursor: !isCurrentDateLocked ? "not-allowed" : "pointer",
-                      opacity: !isCurrentDateLocked ? 0.6 : 1,
-                    }}
-                  >
-                    Unlock{" "}
-                    {lockType === "whole"
-                      ? "Institution"
-                      : lockType === "department"
-                        ? "Department"
-                        : "Class"}
-                  </button>
-                </div>
+                  Skip & Continue
+                </button>
+                <button
+                  onClick={async () => {
+                    // Lock attendance first
+                    const dateToLock =
+                      reportDateMode === "range" ? reportDateFrom : reportDate;
+                    try {
+                      const res = await apiCall(
+                        "/api/attendance-lock/bulk-lock",
+                        {
+                          method: "POST",
+                          body: JSON.stringify({
+                            lockType: reportType,
+                            departmentId: reportDepartment?.id || null,
+                            classId: reportClass?.id || null,
+                            date: dateToLock,
+                            isLocked: true,
+                          }),
+                        },
+                      );
+                      const data = await res.json();
+                      if (data.success) {
+                        alert(
+                          `Attendance locked successfully for ${data.lockedCount} class(es)!`,
+                        );
+                      }
+                    } catch (error) {
+                      console.error("Failed to lock attendance:", error);
+                    }
+
+                    // Then proceed with the action
+                    if (lockConfirmAction === "print") {
+                      handleLockConfirmAndPrint();
+                    } else {
+                      handleLockConfirmAndExport();
+                    }
+                  }}
+                  style={{
+                    padding: "10px 20px",
+                    border: "none",
+                    borderRadius: "4px",
+                    backgroundColor: "#3498db",
+                    color: "white",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                  }}
+                >
+                  Lock & Continue
+                </button>
               </div>
-            )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal for showing unsubmitted classes */}
+        {showSubmissionModal && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: 1000,
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: "white",
+                borderRadius: "8px",
+                padding: "30px",
+                maxWidth: "600px",
+                maxHeight: "80vh",
+                overflowY: "auto",
+                boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+              }}
+            >
+              <h2
+                style={{ marginTop: 0, color: "#e74c3c", marginBottom: "20px" }}
+              >
+                ⚠️ Attendance Not Submitted
+              </h2>
+              <p style={{ color: "#666", marginBottom: "20px" }}>
+                The following classes have not submitted attendance for{" "}
+                <strong>
+                  {reportDateMode === "range"
+                    ? new Date(reportDateFrom).toLocaleDateString()
+                    : new Date(reportDate).toLocaleDateString()}
+                </strong>
+                :
+              </p>
+
+              <div
+                style={{
+                  backgroundColor: "#f9f3f3",
+                  border: "1px solid #e74c3c",
+                  borderRadius: "4px",
+                  padding: "15px",
+                  marginBottom: "20px",
+                }}
+              >
+                <ul
+                  style={{
+                    margin: 0,
+                    paddingLeft: "20px",
+                    listStyleType: "disc",
+                  }}
+                >
+                  {unsubmittedClasses.map((cls) => (
+                    <li
+                      key={cls.id}
+                      style={{
+                        marginBottom: "8px",
+                        color: "#333",
+                        fontSize: "14px",
+                      }}
+                    >
+                      {cls.name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <p
+                style={{
+                  color: "#666",
+                  fontSize: "13px",
+                  marginBottom: "20px",
+                }}
+              >
+                Do you want to continue with the report anyway?
+              </p>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "10px",
+                }}
+              >
+                <button
+                  onClick={() => {
+                    setShowSubmissionModal(false);
+                    setUnsubmittedClasses([]);
+                  }}
+                  style={{
+                    padding: "8px 16px",
+                    border: "1px solid #bdc3c7",
+                    borderRadius: "4px",
+                    backgroundColor: "#ecf0f1",
+                    color: "#333",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    setShowSubmissionModal(false);
+                    setUnsubmittedClasses([]);
+                    setProceedWithPrint(true);
+                    await performPrintReport();
+                  }}
+                  style={{
+                    padding: "8px 16px",
+                    border: "none",
+                    borderRadius: "4px",
+                    backgroundColor: "#27ae60",
+                    color: "white",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                  }}
+                >
+                  Continue & Print
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
-
-      {/* Modal for lock confirmation */}
-      {showLockConfirmModal && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: "white",
-              borderRadius: "8px",
-              padding: "30px",
-              maxWidth: "500px",
-              width: "90%",
-              boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-            }}
-          >
-            <h2
-              style={{ marginTop: 0, color: "#3498db", marginBottom: "20px" }}
-            >
-              🔒 Lock Attendance
-            </h2>
-            <p
-              style={{ color: "#666", marginBottom: "20px", fontSize: "14px" }}
-            >
-              Do you want to lock attendance for{" "}
-              <strong>
-                {reportType === "whole"
-                  ? "the Whole Institution"
-                  : reportType === "department"
-                    ? `Department: ${reportDepartment?.name || "Selected Department"}`
-                    : `Class: ${reportClass?.name || "Selected Class"}`}
-              </strong>{" "}
-              before {lockConfirmAction === "print" ? "printing" : "exporting"}{" "}
-              the report?
-            </p>
-            <p
-              style={{ color: "#999", fontSize: "13px", marginBottom: "20px" }}
-            >
-              Locking will prevent further modifications to attendance records
-              for the selected date.
-            </p>
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "10px",
-              }}
-            >
-              <button
-                onClick={() => {
-                  setShowLockConfirmModal(false);
-                  // Proceed without locking
-                  if (lockConfirmAction === "print") {
-                    handleLockConfirmAndPrint();
-                  } else {
-                    handleLockConfirmAndExport();
-                  }
-                }}
-                style={{
-                  padding: "10px 20px",
-                  border: "1px solid #bdc3c7",
-                  borderRadius: "4px",
-                  backgroundColor: "#ecf0f1",
-                  color: "#333",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: "500",
-                }}
-              >
-                Skip & Continue
-              </button>
-              <button
-                onClick={async () => {
-                  // Lock attendance first
-                  const dateToLock =
-                    reportDateMode === "range" ? reportDateFrom : reportDate;
-                  try {
-                    const res = await apiCall(
-                      "/api/attendance-lock/bulk-lock",
-                      {
-                        method: "POST",
-                        body: JSON.stringify({
-                          lockType: reportType,
-                          departmentId: reportDepartment?.id || null,
-                          classId: reportClass?.id || null,
-                          date: dateToLock,
-                          isLocked: true,
-                        }),
-                      },
-                    );
-                    const data = await res.json();
-                    if (data.success) {
-                      alert(
-                        `Attendance locked successfully for ${data.lockedCount} class(es)!`,
-                      );
-                    }
-                  } catch (error) {
-                    console.error("Failed to lock attendance:", error);
-                  }
-
-                  // Then proceed with the action
-                  if (lockConfirmAction === "print") {
-                    handleLockConfirmAndPrint();
-                  } else {
-                    handleLockConfirmAndExport();
-                  }
-                }}
-                style={{
-                  padding: "10px 20px",
-                  border: "none",
-                  borderRadius: "4px",
-                  backgroundColor: "#3498db",
-                  color: "white",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: "500",
-                }}
-              >
-                Lock & Continue
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal for showing unsubmitted classes */}
-      {showSubmissionModal && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: "white",
-              borderRadius: "8px",
-              padding: "30px",
-              maxWidth: "600px",
-              maxHeight: "80vh",
-              overflowY: "auto",
-              boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-            }}
-          >
-            <h2
-              style={{ marginTop: 0, color: "#e74c3c", marginBottom: "20px" }}
-            >
-              ⚠️ Attendance Not Submitted
-            </h2>
-            <p style={{ color: "#666", marginBottom: "20px" }}>
-              The following classes have not submitted attendance for{" "}
-              <strong>
-                {reportDateMode === "range"
-                  ? new Date(reportDateFrom).toLocaleDateString()
-                  : new Date(reportDate).toLocaleDateString()}
-              </strong>
-              :
-            </p>
-
-            <div
-              style={{
-                backgroundColor: "#f9f3f3",
-                border: "1px solid #e74c3c",
-                borderRadius: "4px",
-                padding: "15px",
-                marginBottom: "20px",
-              }}
-            >
-              <ul
-                style={{
-                  margin: 0,
-                  paddingLeft: "20px",
-                  listStyleType: "disc",
-                }}
-              >
-                {unsubmittedClasses.map((cls) => (
-                  <li
-                    key={cls.id}
-                    style={{
-                      marginBottom: "8px",
-                      color: "#333",
-                      fontSize: "14px",
-                    }}
-                  >
-                    {cls.name}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <p
-              style={{ color: "#666", fontSize: "13px", marginBottom: "20px" }}
-            >
-              Do you want to continue with the report anyway?
-            </p>
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "10px",
-              }}
-            >
-              <button
-                onClick={() => {
-                  setShowSubmissionModal(false);
-                  setUnsubmittedClasses([]);
-                }}
-                style={{
-                  padding: "8px 16px",
-                  border: "1px solid #bdc3c7",
-                  borderRadius: "4px",
-                  backgroundColor: "#ecf0f1",
-                  color: "#333",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: "500",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  setShowSubmissionModal(false);
-                  setUnsubmittedClasses([]);
-                  setProceedWithPrint(true);
-                  await performPrintReport();
-                }}
-                style={{
-                  padding: "8px 16px",
-                  border: "none",
-                  borderRadius: "4px",
-                  backgroundColor: "#27ae60",
-                  color: "white",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: "500",
-                }}
-              >
-                Continue & Print
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

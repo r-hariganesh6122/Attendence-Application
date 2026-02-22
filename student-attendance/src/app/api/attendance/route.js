@@ -47,6 +47,46 @@ export async function POST(request) {
       );
     }
 
+    // Check if attendance is locked for this date
+    const attendanceLock = await prisma.attendanceLock.findUnique({
+      where: {
+        classId_date: {
+          classId,
+          date: new Date(date + "T00:00:00.000Z"),
+        },
+      },
+    });
+
+    if (attendanceLock?.isLocked) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Attendance is locked for this date. Reason: ${attendanceLock.reason || "No reason provided"}`,
+        },
+        { status: 403 },
+      );
+    }
+
+    // Check if date is holiday-locked
+    const holidayLock = await prisma.holidayLock.findUnique({
+      where: {
+        classId_date: {
+          classId,
+          date: new Date(date + "T00:00:00.000Z"),
+        },
+      },
+    });
+
+    if (holidayLock) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Holiday-${holidayLock.reason}`,
+        },
+        { status: 403 },
+      );
+    }
+
     // Remove existing attendance records for this class and date
     await prisma.attendance.deleteMany({
       where: {

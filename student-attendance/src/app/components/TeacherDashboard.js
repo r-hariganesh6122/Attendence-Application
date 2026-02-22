@@ -14,6 +14,8 @@ function TeacherDashboard({ user, onLogout }) {
   const [attendance, setAttendance] = useState({});
   const [currentDepartment, setCurrentDepartment] = useState(null);
   const [attendanceLocked, setAttendanceLocked] = useState(false);
+  const [holidayLocked, setHolidayLocked] = useState(false);
+  const [holidayReason, setHolidayReason] = useState("");
 
   // Fetch teacher's departments (classes)
   useEffect(() => {
@@ -22,8 +24,12 @@ function TeacherDashboard({ user, onLogout }) {
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.departments.length > 0) {
-          setDepartments(data.departments);
-          setSelectedDepartmentId(data.departments[0].id);
+          // Remove duplicate departments by ID
+          const uniqueDepts = Array.from(
+            new Map(data.departments.map((dept) => [dept.id, dept])).values(),
+          );
+          setDepartments(uniqueDepts);
+          setSelectedDepartmentId(uniqueDepts[0].id);
         } else {
           setDepartments([]);
           setSelectedDepartmentId("");
@@ -47,6 +53,8 @@ function TeacherDashboard({ user, onLogout }) {
       setStudents([]);
       setAttendance({});
       setAttendanceLocked(false);
+      setHolidayLocked(false);
+      setHolidayReason("");
       return;
     }
 
@@ -75,6 +83,23 @@ function TeacherDashboard({ user, onLogout }) {
       const dataLock = await resLock.json();
       setAttendanceLocked(dataLock.isLocked || false);
 
+      // Fetch holiday lock status
+      const resHolidayLock = await apiCall(
+        `/api/holiday-lock?classId=${selectedDepartmentId}&date=${dateStr}`,
+      );
+      const dataHolidayLock = await resHolidayLock.json();
+      console.log("[TeacherDashboard] Holiday lock response:", dataHolidayLock);
+      const isHolidayLocked = dataHolidayLock.isLocked || false;
+      const holidayReasonText =
+        dataHolidayLock.lock && dataHolidayLock.lock.reason
+          ? dataHolidayLock.lock.reason
+          : "";
+      setHolidayLocked(isHolidayLocked);
+      setHolidayReason(holidayReasonText);
+      console.log(
+        `[TeacherDashboard] Holiday locked: ${isHolidayLocked}, Reason: ${holidayReasonText}`,
+      );
+
       // Pre-fill attendance state
       const initial = {};
       (dataStudents.success ? dataStudents.students : []).forEach((student) => {
@@ -97,18 +122,41 @@ function TeacherDashboard({ user, onLogout }) {
   };
 
   const isDateInPast = (dateStr) => {
+    // Use UTC for consistent date comparison
     const [year, month, day] = dateStr.split("-").map(Number);
-    const selectedDateOnly = new Date(year, month - 1, day);
-    const todayOnly = new Date();
-    todayOnly.setHours(0, 0, 0, 0);
-    return selectedDateOnly < todayOnly;
+    const selectedDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    const today = new Date();
+    const todayUTC = new Date(
+      Date.UTC(
+        today.getUTCFullYear(),
+        today.getUTCMonth(),
+        today.getUTCDate(),
+        0,
+        0,
+        0,
+        0,
+      ),
+    );
+    console.log(
+      `[isDateInPast] Comparing ${dateStr}: selectedDate=${selectedDate.toISOString()}, todayUTC=${todayUTC.toISOString()}, isPast=${selectedDate < todayUTC}`,
+    );
+    return selectedDate < todayUTC;
   };
 
   const isAttendanceEditable = () => {
-    return !isDateInPast(selectedDate) && !attendanceLocked;
+    return !isDateInPast(selectedDate) && !attendanceLocked && !holidayLocked;
   };
 
   const getLockedReason = () => {
+    console.log(
+      `[getLockedReason] holidayLocked=${holidayLocked}, attendanceLocked=${attendanceLocked}, isDateInPast=${isDateInPast(selectedDate)}`,
+    );
+    if (holidayLocked) {
+      console.log(
+        `[getLockedReason] Returning holiday reason: Holiday-${holidayReason}`,
+      );
+      return `Holiday-${holidayReason}`;
+    }
     if (attendanceLocked) {
       return "This attendance is locked by admin";
     }
@@ -121,11 +169,32 @@ function TeacherDashboard({ user, onLogout }) {
   const handleDateChange = (e) => {
     const newDate = e.target.value;
 
+    // Validate that the date is not empty
+    if (!newDate) {
+      alert("Please select a valid date.");
+      return;
+    }
+
+    // Parse the date and validate it's actually a valid date
+    const [year, month, day] = newDate.split("-").map(Number);
+    const selectedDateObj = new Date(year, month - 1, day);
+
+    // Check if the date is valid by comparing back
+    // (e.g., 31 Feb will become 3 Mar, which doesn't match input)
+    if (
+      selectedDateObj.getFullYear() !== year ||
+      selectedDateObj.getMonth() !== month - 1 ||
+      selectedDateObj.getDate() !== day
+    ) {
+      alert(
+        "Invalid date. Please enter a valid date (e.g., 28 Feb, not 31 Feb).",
+      );
+      return;
+    }
+
     // Validate that the selected date is not in the future
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const [year, month, day] = newDate.split("-").map(Number);
-    const selectedDateObj = new Date(year, month - 1, day);
 
     if (selectedDateObj > today) {
       alert(
@@ -144,8 +213,15 @@ function TeacherDashboard({ user, onLogout }) {
   };
 
   const handleAbsentChange = (studentId) => {
+    console.log(
+      `[handleAbsentChange] Clicked. isAttendanceEditable=${isAttendanceEditable()}, holidayLocked=${holidayLocked}, attendanceLocked=${attendanceLocked}`,
+    );
     if (!isAttendanceEditable()) {
-      alert(getLockedReason());
+      const reason = getLockedReason();
+      console.log(
+        `[handleAbsentChange] Not editable, showing alert: ${reason}`,
+      );
+      alert(reason);
       return;
     }
     setAttendance((prev) => {
@@ -333,9 +409,11 @@ function TeacherDashboard({ user, onLogout }) {
                 }}
               >
                 ⚠️{" "}
-                {attendanceLocked
-                  ? "This attendance is locked by admin. Attendance cannot be modified."
-                  : "This is a previous date. Attendance cannot be modified."}
+                {holidayLocked
+                  ? `Holiday-${holidayReason}. Attendance cannot be modified.`
+                  : attendanceLocked
+                    ? "This attendance is locked by admin. Attendance cannot be modified."
+                    : "This is a previous date. Attendance cannot be modified."}
               </p>
             )}
           </div>

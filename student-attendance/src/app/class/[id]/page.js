@@ -1409,7 +1409,7 @@ export default function ClassDetailsPage({ params }) {
                             <div>
                               {courses.indexOf(course) + 1}
                               {idx > 0 && "."}
-                              {idx > 0 && String.fromCharCode(97 + idx - 1)}
+                              {idx > 0 && idx}
                             </div>
                             <div>{course.courseCode}</div>
                             <div>{course.subject}</div>

@@ -23,55 +23,180 @@ function randomReason() {
 
 async function seedAttendance() {
   const students = await prisma.student.findMany();
-  // Use local date (YYYY-MM-DD) for attendance
+  const classes = await prisma.class.findMany({
+    include: { department: true },
+  });
+
+  // Get today's date in UTC
   const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
+  const utcDate = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+
+  const yyyy = utcDate.getUTCFullYear();
+  const mm = String(utcDate.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(utcDate.getUTCDate()).padStart(2, "0");
   const todayString = `${yyyy}-${mm}-${dd}`;
-  const today = new Date(todayString);
 
-  for (const student of students) {
-    const status = randomStatus();
-    let informed = null;
-    let absenceReason = null;
+  // Get all weekdays (not Sunday) in the 7-day range
+  const weekdaysInRange = [];
+  for (let dayOffset = -6; dayOffset <= 0; dayOffset++) {
+    const checkDate = new Date(
+      Date.UTC(yyyy, utcDate.getUTCMonth(), utcDate.getUTCDate() + dayOffset),
+    );
 
-    if (status === "absent") {
-      informed = randomInformed();
-      absenceReason = randomReason();
-      // Validation: if informed is true, absenceReason must not be null
-      if (informed && !absenceReason) {
-        // Re-select a reason that is not null
-        const nonNullReasons = [
-          "Sick",
-          "Family Emergency",
-          "Personal Work",
-          "Travel",
-          "Other",
-        ];
-        absenceReason =
-          nonNullReasons[Math.floor(Math.random() * nonNullReasons.length)];
-      }
+    if (checkDate.getUTCDay() !== 0) {
+      // Not Sunday
+      const checkYYYY = checkDate.getUTCFullYear();
+      const checkMM = String(checkDate.getUTCMonth() + 1).padStart(2, "0");
+      const checkDD = String(checkDate.getUTCDate()).padStart(2, "0");
+      const dateString = `${checkYYYY}-${checkMM}-${checkDD}`;
+      weekdaysInRange.push({ dateString });
+    }
+  }
+
+  // Select 3 different weekdays deterministically using day of month as seed
+  const dayOfMonth = utcDate.getUTCDate();
+  const institutionIdx = dayOfMonth % weekdaysInRange.length;
+  const deptIdx =
+    (dayOfMonth + 1) % weekdaysInRange.length === institutionIdx
+      ? (dayOfMonth + 2) % weekdaysInRange.length
+      : (dayOfMonth + 1) % weekdaysInRange.length;
+  const classIdx = [institutionIdx, deptIdx].includes(
+    (dayOfMonth + 3) % weekdaysInRange.length,
+  )
+    ? (dayOfMonth + 4) % weekdaysInRange.length
+    : (dayOfMonth + 3) % weekdaysInRange.length;
+
+  const institutionHolidayDate =
+    weekdaysInRange[institutionIdx]?.dateString || null;
+  const deptHolidayDate = weekdaysInRange[deptIdx]?.dateString || null;
+  const classHolidayDate = weekdaysInRange[classIdx]?.dateString || null;
+
+  console.log(`Institution holiday: ${institutionHolidayDate}`);
+  console.log(`Department (CSE) holiday: ${deptHolidayDate}`);
+  console.log(`Class (AIDS-A) holiday: ${classHolidayDate}`);
+
+  // Get CSE department and AIDS-A class for filtering
+  const cseDept = classes.find(
+    (c) =>
+      c.department &&
+      c.department.name.toLowerCase() === "cse" &&
+      c.department.name,
+  )?.department;
+  const aidsAClass = classes.find((c) => c.name.toLowerCase() === "aids-a");
+
+  // Generate attendance for a week (7 days past including today)
+  for (let dayOffset = -6; dayOffset <= 0; dayOffset++) {
+    const currentDateUTC = new Date(
+      Date.UTC(yyyy, utcDate.getUTCMonth(), utcDate.getUTCDate() + dayOffset),
+    );
+
+    // Skip Sundays - they will be handled by the automated Sunday locker
+    if (currentDateUTC.getUTCDay() === 0) {
+      const dateStr = `${currentDateUTC.getUTCFullYear()}-${String(currentDateUTC.getUTCMonth() + 1).padStart(2, "0")}-${String(currentDateUTC.getUTCDate()).padStart(2, "0")}`;
+      console.log(`Skipping Sunday ${dateStr} (will be locked automatically)`);
+      continue;
     }
 
-    await prisma.attendance.create({
-      data: {
-        date: today,
-        studentId: student.id,
-        classId: student.classId,
-        status,
-        absenceReason,
-        informed,
-      },
-    });
+    const currentYYYY = currentDateUTC.getUTCFullYear();
+    const currentMM = String(currentDateUTC.getUTCMonth() + 1).padStart(2, "0");
+    const currentDD = String(currentDateUTC.getUTCDate()).padStart(2, "0");
+    const currentDateString = `${currentYYYY}-${currentMM}-${currentDD}`;
 
-    console.log(
-      `Attendance for ${student.studentName} (${status}${status === "absent" ? ", " + (informed ? "Informed" : "Not Informed") : ""})`,
-    );
+    // Convert date string to Date object for database (UTC)
+    const attendanceDate = new Date(currentDateString + "T00:00:00.000Z");
+
+    for (const classItem of classes) {
+      // Check which holidays apply to this class
+      let skipThisClass = false;
+
+      // All classes skip institution holiday
+      if (currentDateString === institutionHolidayDate) {
+        skipThisClass = true;
+      }
+
+      // Only CSE classes skip department holiday
+      if (
+        currentDateString === deptHolidayDate &&
+        cseDept &&
+        classItem.departmentId === cseDept.id
+      ) {
+        skipThisClass = true;
+      }
+
+      // Only AIDS-A class skips class holiday
+      if (
+        currentDateString === classHolidayDate &&
+        aidsAClass &&
+        classItem.id === aidsAClass.id
+      ) {
+        skipThisClass = true;
+      }
+
+      if (skipThisClass) {
+        if (currentDateString === institutionHolidayDate) {
+          console.log(
+            `Skipping ${classItem.name} on institution holiday ${currentDateString}`,
+          );
+        } else if (currentDateString === deptHolidayDate) {
+          console.log(
+            `Skipping ${classItem.name} (CSE) on department holiday ${currentDateString}`,
+          );
+        } else if (currentDateString === classHolidayDate) {
+          console.log(
+            `Skipping ${classItem.name} (AIDS-A) on class holiday ${currentDateString}`,
+          );
+        }
+        continue;
+      }
+
+      // Get students for this class
+      const classStudents = students.filter((s) => s.classId === classItem.id);
+
+      for (const student of classStudents) {
+        let status = randomStatus();
+        let informed = null;
+        let absenceReason = null;
+
+        if (status === "absent") {
+          informed = randomInformed();
+          absenceReason = randomReason();
+          // Validation: if informed is true, absenceReason must not be null
+          if (informed && !absenceReason) {
+            // Re-select a reason that is not null
+            const nonNullReasons = [
+              "Sick",
+              "Family Emergency",
+              "Personal Work",
+              "Travel",
+              "Other",
+            ];
+            absenceReason =
+              nonNullReasons[Math.floor(Math.random() * nonNullReasons.length)];
+          }
+        }
+
+        await prisma.attendance.create({
+          data: {
+            date: attendanceDate,
+            studentId: student.id,
+            classId: student.classId,
+            status,
+            absenceReason,
+            informed,
+          },
+        });
+
+        console.log(
+          `Attendance for ${student.studentName} on ${currentDateString} (${status}${status === "absent" ? ", " + (informed ? "Informed" : "Not Informed") : ""})`,
+        );
+      }
+    }
   }
 
   await prisma.$disconnect();
-  console.log("Attendance seeding complete.");
+  console.log("Attendance seeding complete for the week.");
 }
 
 module.exports = seedAttendance;

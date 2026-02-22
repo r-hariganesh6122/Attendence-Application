@@ -33,6 +33,7 @@ model Class {
   classTeachers ClassTeacher[]
   courses      Course[]
   attendanceLocks AttendanceLock[]
+  holidayLocks HolidayLock[]
 
   @@unique([name, departmentId])
 }
@@ -59,6 +60,7 @@ model User {
   role         String  // 'admin', 'teacher', 'student'
   classTeachers ClassTeacher[]
   attendanceLocks AttendanceLock[]
+  holidayLocks    HolidayLock[] @relation("HolidayLocks")
 }
 // Join table for teachers assigned to classes with subjects
 model ClassTeacher {
@@ -100,6 +102,20 @@ model AttendanceLock {
   
   class     Class    @relation(fields: [classId], references: [id])
   lockedByUser User?  @relation(fields: [lockedBy], references: [id])
+
+  @@unique([classId, date])
+}
+
+model HolidayLock {
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  classId   Int
+  reason    String   // Required reason for holiday/lock
+  lockedAt  DateTime @default(now())
+  lockedBy  Int
+  
+  class     Class    @relation(fields: [classId], references: [id])
+  lockedByUser User   @relation("HolidayLocks", fields: [lockedBy], references: [id])
 
   @@unique([classId, date])
 }

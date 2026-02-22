@@ -91,6 +91,19 @@ CREATE TABLE `AttendanceLock` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `HolidayLock` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `date` DATETIME(3) NOT NULL,
+    `classId` INTEGER NOT NULL,
+    `reason` VARCHAR(191) NOT NULL,
+    `lockedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `lockedBy` INTEGER NOT NULL,
+
+    UNIQUE INDEX `HolidayLock_classId_date_key`(`classId`, `date`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `Student` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `rollNo` VARCHAR(191) NOT NULL,
@@ -132,6 +145,12 @@ ALTER TABLE `AttendanceLock` ADD CONSTRAINT `AttendanceLock_classId_fkey` FOREIG
 
 -- AddForeignKey
 ALTER TABLE `AttendanceLock` ADD CONSTRAINT `AttendanceLock_lockedBy_fkey` FOREIGN KEY (`lockedBy`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `HolidayLock` ADD CONSTRAINT `HolidayLock_classId_fkey` FOREIGN KEY (`classId`) REFERENCES `Class`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `HolidayLock` ADD CONSTRAINT `HolidayLock_lockedBy_fkey` FOREIGN KEY (`lockedBy`) REFERENCES `User`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Student` ADD CONSTRAINT `Student_classId_fkey` FOREIGN KEY (`classId`) REFERENCES `Class`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -4,18 +4,18 @@ import { authenticateRequest } from "@/lib/authMiddleware";
 
 const prisma = new PrismaClient();
 
-// POST: Bulk lock attendance for institution, department, or class
+// POST: Bulk lock/unlock holidays for institution, department, or class
 export async function POST(request) {
   try {
     const user = await authenticateRequest(request);
-    if (!user || user.role !== "admin") {
+    if (!user || (user.role !== "admin" && user.role !== "teacher")) {
       return NextResponse.json(
-        { success: false, message: "Unauthorized - Admin access required" },
+        { success: false, message: "Unauthorized" },
         { status: 403 },
       );
     }
 
-    // Verify user exists in database and get their ID
+    // Verify user exists in database
     // Ensure ID is a valid number
     const userId =
       typeof user.id === "string" ? parseInt(user.id, 10) : user.id;
@@ -28,7 +28,7 @@ export async function POST(request) {
       );
     }
 
-    console.log("Bulk lock - User from token:", {
+    console.log("Holiday bulk lock - User from token:", {
       id: user.id,
       parsedId: userId,
       role: user.role,
@@ -39,7 +39,7 @@ export async function POST(request) {
       select: { id: true, name: true, mobile: true },
     });
 
-    console.log("Bulk lock - DB Lookup result:", {
+    console.log("Holiday bulk lock - DB Lookup result:", {
       found: !!dbUser,
       searchedId: userId,
       result: dbUser,
@@ -66,13 +66,28 @@ export async function POST(request) {
       date,
       dateFrom,
       dateTo,
-      isLocked,
       reason,
+      action, // "lock" or "unlock"
     } = body;
 
     if (!lockType) {
       return NextResponse.json(
         { success: false, message: "lockType is required" },
+        { status: 400 },
+      );
+    }
+
+    if (!action || !["lock", "unlock"].includes(action)) {
+      return NextResponse.json(
+        { success: false, message: "action must be 'lock' or 'unlock'" },
+        { status: 400 },
+      );
+    }
+
+    // For lock action, reason is required
+    if (action === "lock" && !reason) {
+      return NextResponse.json(
+        { success: false, message: "reason is required for lock action" },
         { status: 400 },
       );
     }
@@ -88,12 +103,12 @@ export async function POST(request) {
       );
     }
 
-    // Build array of dates to lock
-    let datesToLock = [];
+    // Build array of dates
+    let datesToProcess = [];
 
     if (date) {
       // Single date
-      datesToLock = [new Date(date + "T00:00:00.000Z")];
+      datesToProcess = [new Date(date + "T00:00:00.000Z")];
     } else {
       // Date range
       const startDate = new Date(dateFrom + "T00:00:00.000Z");
@@ -104,12 +119,13 @@ export async function POST(request) {
         d <= endDate;
         d.setDate(d.getDate() + 1)
       ) {
-        datesToLock.push(new Date(d));
+        datesToProcess.push(new Date(d));
       }
     }
+
     let targetClassIds = [];
 
-    // Determine which classes to lock based on lock type
+    // Determine which classes to process based on lock type
     if (lockType === "whole") {
       // Get all classes in the institution
       const allClasses = await prisma.class.findMany({
@@ -147,48 +163,76 @@ export async function POST(request) {
       );
     }
 
-    // Lock all target classes for the specified date
-    let lockedCount = 0;
+    let processedCount = 0;
 
+    // Process all target classes for the specified dates
     for (const cId of targetClassIds) {
-      try {
-        await prisma.attendanceLock.upsert({
-          where: {
-            classId_date: {
-              classId: cId,
-              date: dateObj,
-            },
-          },
-          update: {
-            isLocked,
-            lockedAt: isLocked ? new Date() : null,
-            lockedBy: isLocked ? dbUser.id : null,
-            reason: isLocked ? reason : null,
-          },
-          create: {
-            classId: cId,
-            date: dateObj,
-            isLocked,
-            lockedAt: isLocked ? new Date() : null,
-            lockedBy: isLocked ? dbUser.id : null,
-            reason: isLocked ? reason : null,
-          },
-        });
-        lockedCount++;
-      } catch (error) {
-        console.error(`Failed to lock class ${cId}:`, error);
+      for (const dateObj of datesToProcess) {
+        try {
+          if (action === "lock") {
+            // Create or update holiday lock
+            await prisma.holidayLock.upsert({
+              where: {
+                classId_date: {
+                  classId: cId,
+                  date: dateObj,
+                },
+              },
+              update: {
+                reason,
+                lockedAt: new Date(),
+                lockedBy: dbUser.id,
+              },
+              create: {
+                classId: cId,
+                date: dateObj,
+                reason,
+                lockedBy: dbUser.id,
+              },
+            });
+          } else {
+            // Delete holiday lock
+            await prisma.holidayLock.delete({
+              where: {
+                classId_date: {
+                  classId: cId,
+                  date: dateObj,
+                },
+              },
+            });
+          }
+          processedCount++;
+        } catch (error) {
+          if (action === "unlock" && error.code === "P2025") {
+            // Record not found when trying to delete - that's OK for unlock
+            processedCount++;
+          } else {
+            console.error(
+              `Failed to ${action} holiday lock for class ${cId} on ${dateObj}:`,
+              error,
+            );
+          }
+        }
       }
     }
 
+    const studentCount = await prisma.student.count({
+      where: {
+        classId: {
+          in: targetClassIds,
+        },
+      },
+    });
+
     return NextResponse.json({
       success: true,
-      message: isLocked
-        ? `Attendance locked for ${lockedCount} class(es)`
-        : `Attendance unlocked for ${lockedCount} class(es)`,
-      lockedCount,
+      message: `Holiday ${action === "lock" ? "locked" : "unlocked"} successfully`,
+      processedCount,
+      affectedClasses: targetClassIds.length,
+      affectedStudents: studentCount,
     });
   } catch (error) {
-    console.error("POST /api/attendance-lock/bulk-lock error:", error);
+    console.error("POST /api/holiday-lock/bulk-lock error:", error);
     return NextResponse.json(
       { success: false, message: error.message },
       { status: 500 },
