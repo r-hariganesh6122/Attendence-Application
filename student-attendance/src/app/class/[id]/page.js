@@ -210,14 +210,14 @@ export default function ClassDetailsPage({ params }) {
         else buckets["90-100"]++;
       });
 
-      // Format data for histogram
+      // Format data for histogram in descending order
       const histData = [
+        { name: "100-90%", count: buckets["90-100"] },
+        { name: "90-80%", count: buckets["80-90"] },
+        { name: "80-70%", count: buckets["70-80"] },
+        { name: "70-60%", count: buckets["60-70"] },
+        { name: "60-50%", count: buckets["50-60"] },
         { name: "<50%", count: buckets["<50"] },
-        { name: "50-60%", count: buckets["50-60"] },
-        { name: "60-70%", count: buckets["60-70"] },
-        { name: "70-80%", count: buckets["70-80"] },
-        { name: "80-90%", count: buckets["80-90"] },
-        { name: "90-100%", count: buckets["90-100"] },
       ];
 
       setAttendanceHistogramData(histData);
