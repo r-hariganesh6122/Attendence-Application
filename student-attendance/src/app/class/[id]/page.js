@@ -2824,7 +2824,14 @@ export default function ClassDetailsPage({ params }) {
             <div style={{ width: "100%" }}>
               {/* Student Search Section */}
               <div className="search-section" style={{ marginBottom: "20px" }}>
-                <h3 style={{ marginBottom: "10px", fontSize: "16px", fontWeight: "600", color: "#333" }}>
+                <h3
+                  style={{
+                    marginBottom: "10px",
+                    fontSize: "16px",
+                    fontWeight: "600",
+                    color: "#333",
+                  }}
+                >
                   Student Absent Details
                 </h3>
                 <input
