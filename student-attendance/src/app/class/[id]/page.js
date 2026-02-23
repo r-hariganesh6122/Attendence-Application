@@ -4,6 +4,54 @@ import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { apiCall } from "@/lib/apiUtils";
 import "../../attendance.css";
+import ClassAttendanceBarChart from "../../components/ClassAttendanceBarChart";
+import ClassAttendancePieChart from "../../components/ClassAttendancePieChart";
+
+// Helper function to sort array by search match position
+function sortByMatchPosition(items, searchQuery, fieldNames = []) {
+  if (!searchQuery.trim()) return items;
+
+  const search = searchQuery.toLowerCase();
+
+  return [...items].sort((a, b) => {
+    // Get all possible values to search in for each item
+    let aValues = fieldNames.map((field) => {
+      const value = a[field];
+      return value ? String(value).toLowerCase() : "";
+    });
+
+    let bValues = fieldNames.map((field) => {
+      const value = b[field];
+      return value ? String(value).toLowerCase() : "";
+    });
+
+    // Find the minimum position of match for item a
+    let aMinPos = Math.min(
+      ...aValues.map((val) => {
+        const pos = val.indexOf(search);
+        return pos === -1 ? Infinity : pos;
+      }),
+    );
+
+    // Find the minimum position of match for item b
+    let bMinPos = Math.min(
+      ...bValues.map((val) => {
+        const pos = val.indexOf(search);
+        return pos === -1 ? Infinity : pos;
+      }),
+    );
+
+    // If positions are different, sort by position
+    if (aMinPos !== bMinPos) {
+      return aMinPos - bMinPos;
+    }
+
+    // If positions are the same, sort alphabetically by the first field
+    const aFirst = aValues[0] || "";
+    const bFirst = bValues[0] || "";
+    return aFirst.localeCompare(bFirst);
+  });
+}
 
 export default function ClassDetailsPage({ params }) {
   const { id } = use(params);
@@ -50,6 +98,14 @@ export default function ClassDetailsPage({ params }) {
   const [editClassTeacher, setEditClassTeacher] = useState(null);
   const [editTeacherSearch, setEditTeacherSearch] = useState("");
 
+  // Attendance chart states
+  const [attendanceHistogramData, setAttendanceHistogramData] = useState([]);
+  const [attendancePieData, setAttendancePieData] = useState({
+    aboveThreshold: 0,
+    belowThreshold: 0,
+    totalStudents: 0,
+  });
+
   useEffect(() => {
     async function fetchClassData() {
       // Fetch students
@@ -84,6 +140,14 @@ export default function ClassDetailsPage({ params }) {
     fetchClassData();
   }, [id]);
 
+  // Load attendance chart data when tab changes to attendance
+  useEffect(() => {
+    if (tab === "attendance") {
+      calculateAttendanceHistogram();
+      calculateAttendancePieData();
+    }
+  }, [tab, id]);
+
   const fetchStudentAttendance = async (studentId) => {
     try {
       const res = await apiCall(`/api/attendance?studentId=${studentId}`);
@@ -92,6 +156,139 @@ export default function ClassDetailsPage({ params }) {
     } catch (error) {
       console.error("Failed to fetch attendance:", error);
       setAttendanceRecords([]);
+    }
+  };
+
+  // Calculate attendance histogram data (attendance % buckets)
+  const calculateAttendanceHistogram = async () => {
+    try {
+      const classAttendanceRes = await apiCall(`/api/attendance?classId=${id}`);
+      const classAttendanceData = await classAttendanceRes.json();
+
+      if (
+        !classAttendanceData.success ||
+        !classAttendanceData.attendanceRecords
+      ) {
+        setAttendanceHistogramData([]);
+        return;
+      }
+
+      // Group attendance by student
+      const studentAttendance = {};
+      classAttendanceData.attendanceRecords.forEach((record) => {
+        if (!studentAttendance[record.studentId]) {
+          studentAttendance[record.studentId] = {
+            present: 0,
+            total: 0,
+          };
+        }
+        studentAttendance[record.studentId].total += 1;
+        if (record.status === "present") {
+          studentAttendance[record.studentId].present += 1;
+        }
+      });
+
+      // Calculate percentages and bucket them
+      const buckets = {
+        "<50": 0,
+        "50-60": 0,
+        "60-70": 0,
+        "70-80": 0,
+        "80-90": 0,
+        "90-100": 0,
+      };
+
+      Object.values(studentAttendance).forEach((attendance) => {
+        if (attendance.total === 0) return;
+        const percentage = (attendance.present / attendance.total) * 100;
+
+        if (percentage < 50) buckets["<50"]++;
+        else if (percentage < 60) buckets["50-60"]++;
+        else if (percentage < 70) buckets["60-70"]++;
+        else if (percentage < 80) buckets["70-80"]++;
+        else if (percentage < 90) buckets["80-90"]++;
+        else buckets["90-100"]++;
+      });
+
+      // Format data for histogram
+      const histData = [
+        { name: "<50%", count: buckets["<50"] },
+        { name: "50-60%", count: buckets["50-60"] },
+        { name: "60-70%", count: buckets["60-70"] },
+        { name: "70-80%", count: buckets["70-80"] },
+        { name: "80-90%", count: buckets["80-90"] },
+        { name: "90-100%", count: buckets["90-100"] },
+      ];
+
+      setAttendanceHistogramData(histData);
+    } catch (error) {
+      console.error("Failed to calculate attendance histogram:", error);
+      setAttendanceHistogramData([]);
+    }
+  };
+
+  // Calculate pie chart data (>75% vs <75%)
+  const calculateAttendancePieData = async () => {
+    try {
+      const classAttendanceRes = await apiCall(`/api/attendance?classId=${id}`);
+      const classAttendanceData = await classAttendanceRes.json();
+
+      if (
+        !classAttendanceData.success ||
+        !classAttendanceData.attendanceRecords
+      ) {
+        setAttendancePieData({
+          aboveThreshold: 0,
+          belowThreshold: 0,
+          totalStudents: 0,
+        });
+        return;
+      }
+
+      // Group attendance by student
+      const studentAttendance = {};
+      classAttendanceData.attendanceRecords.forEach((record) => {
+        if (!studentAttendance[record.studentId]) {
+          studentAttendance[record.studentId] = {
+            present: 0,
+            total: 0,
+          };
+        }
+        studentAttendance[record.studentId].total += 1;
+        if (record.status === "present") {
+          studentAttendance[record.studentId].present += 1;
+        }
+      });
+
+      // Count students above and below 75% threshold
+      let aboveThreshold = 0;
+      let belowThreshold = 0;
+
+      Object.values(studentAttendance).forEach((attendance) => {
+        if (attendance.total === 0) return;
+        const percentage = (attendance.present / attendance.total) * 100;
+
+        if (percentage > 75) {
+          aboveThreshold++;
+        } else {
+          belowThreshold++;
+        }
+      });
+
+      const totalStudents = aboveThreshold + belowThreshold;
+
+      setAttendancePieData({
+        aboveThreshold,
+        belowThreshold,
+        totalStudents,
+      });
+    } catch (error) {
+      console.error("Failed to calculate attendance pie data:", error);
+      setAttendancePieData({
+        aboveThreshold: 0,
+        belowThreshold: 0,
+        totalStudents: 0,
+      });
     }
   };
 
@@ -841,43 +1038,45 @@ export default function ClassDetailsPage({ params }) {
                           overflowY: "auto",
                         }}
                       >
-                        {students
-                          .filter((student) =>
+                        {sortByMatchPosition(
+                          students.filter((student) =>
                             student.studentName
                               .toLowerCase()
                               .includes(selectedStudentToRemove.toLowerCase()),
-                          )
-                          .map((student) => (
-                            <div
-                              key={student.id}
-                              onClick={() =>
-                                setSelectedStudentToRemove(student.studentName)
-                              }
-                              style={{
-                                padding: "10px",
-                                cursor: "pointer",
-                                borderBottom: "1px solid #eee",
-                                backgroundColor:
-                                  selectedStudentToRemove.toLowerCase() ===
-                                  student.studentName.toLowerCase()
-                                    ? "#e3f2fd"
-                                    : "#fff",
-                                transition: "background-color 0.2s",
-                              }}
-                              onMouseEnter={(e) =>
-                                (e.target.style.backgroundColor = "#f5f5f5")
-                              }
-                              onMouseLeave={(e) =>
-                                (e.target.style.backgroundColor =
-                                  selectedStudentToRemove.toLowerCase() ===
-                                  student.studentName.toLowerCase()
-                                    ? "#e3f2fd"
-                                    : "#fff")
-                              }
-                            >
-                              {student.studentName} (Reg: {student.regNo})
-                            </div>
-                          ))}
+                          ),
+                          selectedStudentToRemove,
+                          ["studentName"],
+                        ).map((student) => (
+                          <div
+                            key={student.id}
+                            onClick={() =>
+                              setSelectedStudentToRemove(student.studentName)
+                            }
+                            style={{
+                              padding: "10px",
+                              cursor: "pointer",
+                              borderBottom: "1px solid #eee",
+                              backgroundColor:
+                                selectedStudentToRemove.toLowerCase() ===
+                                student.studentName.toLowerCase()
+                                  ? "#e3f2fd"
+                                  : "#fff",
+                              transition: "background-color 0.2s",
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.target.style.backgroundColor = "#f5f5f5")
+                            }
+                            onMouseLeave={(e) =>
+                              (e.target.style.backgroundColor =
+                                selectedStudentToRemove.toLowerCase() ===
+                                student.studentName.toLowerCase()
+                                  ? "#e3f2fd"
+                                  : "#fff")
+                            }
+                          >
+                            {student.studentName} (Reg: {student.regNo})
+                          </div>
+                        ))}
                         {students.filter((student) =>
                           student.studentName
                             .toLowerCase()
@@ -935,36 +1134,38 @@ export default function ClassDetailsPage({ params }) {
                             overflowY: "auto",
                           }}
                         >
-                          {students
-                            .filter((student) =>
+                          {sortByMatchPosition(
+                            students.filter((student) =>
                               student.studentName
                                 .toLowerCase()
                                 .includes(editStudentSearch.toLowerCase()),
-                            )
-                            .map((student) => (
-                              <div
-                                key={student.id}
-                                onClick={() => {
-                                  setEditStudent(student);
-                                  setEditStudentSearch("");
-                                }}
-                                style={{
-                                  padding: "10px",
-                                  cursor: "pointer",
-                                  borderBottom: "1px solid #eee",
-                                  backgroundColor: "#fff",
-                                  transition: "background-color 0.2s",
-                                }}
-                                onMouseEnter={(e) =>
-                                  (e.target.style.backgroundColor = "#f5f5f5")
-                                }
-                                onMouseLeave={(e) =>
-                                  (e.target.style.backgroundColor = "#fff")
-                                }
-                              >
-                                {student.studentName} (Reg: {student.regNo})
-                              </div>
-                            ))}
+                            ),
+                            editStudentSearch,
+                            ["studentName"],
+                          ).map((student) => (
+                            <div
+                              key={student.id}
+                              onClick={() => {
+                                setEditStudent(student);
+                                setEditStudentSearch("");
+                              }}
+                              style={{
+                                padding: "10px",
+                                cursor: "pointer",
+                                borderBottom: "1px solid #eee",
+                                backgroundColor: "#fff",
+                                transition: "background-color 0.2s",
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.target.style.backgroundColor = "#f5f5f5")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.target.style.backgroundColor = "#fff")
+                              }
+                            >
+                              {student.studentName} (Reg: {student.regNo})
+                            </div>
+                          ))}
                           {students.filter((student) =>
                             student.studentName
                               .toLowerCase()
@@ -1516,8 +1717,8 @@ export default function ClassDetailsPage({ params }) {
                             overflowY: "auto",
                           }}
                         >
-                          {courses
-                            .filter(
+                          {sortByMatchPosition(
+                            courses.filter(
                               (course) =>
                                 course.courseCode
                                   .toLowerCase()
@@ -1525,31 +1726,33 @@ export default function ClassDetailsPage({ params }) {
                                 course.subject
                                   .toLowerCase()
                                   .includes(courseSearch.toLowerCase()),
-                            )
-                            .map((course) => (
-                              <div
-                                key={course.id}
-                                onClick={() => {
-                                  setSelectedCourse(course);
-                                  setCourseSearch("");
-                                }}
-                                style={{
-                                  padding: "10px",
-                                  cursor: "pointer",
-                                  borderBottom: "1px solid #eee",
-                                  backgroundColor: "#fff",
-                                  transition: "background-color 0.2s",
-                                }}
-                                onMouseEnter={(e) =>
-                                  (e.target.style.backgroundColor = "#f5f5f5")
-                                }
-                                onMouseLeave={(e) =>
-                                  (e.target.style.backgroundColor = "#fff")
-                                }
-                              >
-                                {course.courseCode} - {course.subject}
-                              </div>
-                            ))}
+                            ),
+                            courseSearch,
+                            ["courseCode", "subject"],
+                          ).map((course) => (
+                            <div
+                              key={course.id}
+                              onClick={() => {
+                                setSelectedCourse(course);
+                                setCourseSearch("");
+                              }}
+                              style={{
+                                padding: "10px",
+                                cursor: "pointer",
+                                borderBottom: "1px solid #eee",
+                                backgroundColor: "#fff",
+                                transition: "background-color 0.2s",
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.target.style.backgroundColor = "#f5f5f5")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.target.style.backgroundColor = "#fff")
+                              }
+                            >
+                              {course.courseCode} - {course.subject}
+                            </div>
+                          ))}
                           {courses.filter(
                             (course) =>
                               course.courseCode
@@ -1619,40 +1822,42 @@ export default function ClassDetailsPage({ params }) {
                               overflowY: "auto",
                             }}
                           >
-                            {allTeachers
-                              .filter(
+                            {sortByMatchPosition(
+                              allTeachers.filter(
                                 (teacher) =>
                                   teacher.name
                                     .toLowerCase()
                                     .includes(teacherSearch.toLowerCase()) ||
-                                  teacher.mobile
+                                  String(teacher.mobile || "")
                                     .toLowerCase()
                                     .includes(teacherSearch.toLowerCase()),
-                              )
-                              .map((teacher) => (
-                                <div
-                                  key={teacher.id}
-                                  onClick={() => {
-                                    setSelectedTeacherForCourse(teacher);
-                                    setTeacherSearch("");
-                                  }}
-                                  style={{
-                                    padding: "10px",
-                                    cursor: "pointer",
-                                    borderBottom: "1px solid #eee",
-                                    backgroundColor: "#fff",
-                                    transition: "background-color 0.2s",
-                                  }}
-                                  onMouseEnter={(e) =>
-                                    (e.target.style.backgroundColor = "#f5f5f5")
-                                  }
-                                  onMouseLeave={(e) =>
-                                    (e.target.style.backgroundColor = "#fff")
-                                  }
-                                >
-                                  {teacher.name} ({teacher.mobile})
-                                </div>
-                              ))}
+                              ),
+                              teacherSearch,
+                              ["name", "mobile"],
+                            ).map((teacher) => (
+                              <div
+                                key={teacher.id}
+                                onClick={() => {
+                                  setSelectedTeacherForCourse(teacher);
+                                  setTeacherSearch("");
+                                }}
+                                style={{
+                                  padding: "10px",
+                                  cursor: "pointer",
+                                  borderBottom: "1px solid #eee",
+                                  backgroundColor: "#fff",
+                                  transition: "background-color 0.2s",
+                                }}
+                                onMouseEnter={(e) =>
+                                  (e.target.style.backgroundColor = "#f5f5f5")
+                                }
+                                onMouseLeave={(e) =>
+                                  (e.target.style.backgroundColor = "#fff")
+                                }
+                              >
+                                {teacher.name} ({teacher.mobile})
+                              </div>
+                            ))}
                             {allTeachers.filter(
                               (teacher) =>
                                 teacher.name
@@ -1734,8 +1939,8 @@ export default function ClassDetailsPage({ params }) {
                           overflowY: "auto",
                         }}
                       >
-                        {courses
-                          .filter(
+                        {sortByMatchPosition(
+                          courses.filter(
                             (course) =>
                               course.courseCode
                                 .toLowerCase()
@@ -1743,31 +1948,33 @@ export default function ClassDetailsPage({ params }) {
                               course.subject
                                 .toLowerCase()
                                 .includes(courseSearch.toLowerCase()),
-                          )
-                          .map((course) => (
-                            <div
-                              key={course.id}
-                              onClick={() => {
-                                setSelectedCourseToRemove(course);
-                                setCourseSearch("");
-                              }}
-                              style={{
-                                padding: "10px",
-                                cursor: "pointer",
-                                borderBottom: "1px solid #eee",
-                                backgroundColor: "#fff",
-                                transition: "background-color 0.2s",
-                              }}
-                              onMouseEnter={(e) =>
-                                (e.target.style.backgroundColor = "#f5f5f5")
-                              }
-                              onMouseLeave={(e) =>
-                                (e.target.style.backgroundColor = "#fff")
-                              }
-                            >
-                              {course.courseCode} - {course.subject}
-                            </div>
-                          ))}
+                          ),
+                          courseSearch,
+                          ["courseCode", "subject"],
+                        ).map((course) => (
+                          <div
+                            key={course.id}
+                            onClick={() => {
+                              setSelectedCourseToRemove(course);
+                              setCourseSearch("");
+                            }}
+                            style={{
+                              padding: "10px",
+                              cursor: "pointer",
+                              borderBottom: "1px solid #eee",
+                              backgroundColor: "#fff",
+                              transition: "background-color 0.2s",
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.target.style.backgroundColor = "#f5f5f5")
+                            }
+                            onMouseLeave={(e) =>
+                              (e.target.style.backgroundColor = "#fff")
+                            }
+                          >
+                            {course.courseCode} - {course.subject}
+                          </div>
+                        ))}
                       </div>
                     )}
                     {selectedCourseToRemove && (
@@ -1841,8 +2048,8 @@ export default function ClassDetailsPage({ params }) {
                             overflowY: "auto",
                           }}
                         >
-                          {courses
-                            .filter(
+                          {sortByMatchPosition(
+                            courses.filter(
                               (course) =>
                                 course.courseCode
                                   .toLowerCase()
@@ -1850,58 +2057,60 @@ export default function ClassDetailsPage({ params }) {
                                 course.subject
                                   .toLowerCase()
                                   .includes(editTeacherSearch.toLowerCase()),
-                            )
-                            .map((course) => {
-                              const courseTeachers = teachers.filter(
-                                (t) => t.courseId === course.id,
-                              );
-                              return (
-                                <div
-                                  key={course.id}
-                                  onClick={() => {
-                                    setEditClassTeacher({
-                                      courseId: course.id,
-                                      courseCode: course.courseCode,
-                                      courseName: course.subject,
-                                      teachers: courseTeachers,
-                                      newTeacherSearch: "",
-                                      selectedNewTeacher: null,
-                                    });
-                                    setEditTeacherSearch("");
-                                  }}
-                                  style={{
-                                    padding: "10px",
-                                    cursor: "pointer",
-                                    borderBottom: "1px solid #eee",
-                                    backgroundColor: "#fff",
-                                    transition: "background-color 0.2s",
-                                  }}
-                                  onMouseEnter={(e) =>
-                                    (e.target.style.backgroundColor = "#f5f5f5")
-                                  }
-                                  onMouseLeave={(e) =>
-                                    (e.target.style.backgroundColor = "#fff")
-                                  }
-                                >
-                                  {course.courseCode} - {course.subject}
-                                  {courseTeachers.length > 0 && (
-                                    <span
-                                      style={{
-                                        color: "#666",
-                                        fontSize: "12px",
-                                        display: "block",
-                                        marginTop: "4px",
-                                      }}
-                                    >
-                                      Teachers:{" "}
-                                      {courseTeachers
-                                        .map((t) => t.name)
-                                        .join(", ")}
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })}
+                            ),
+                            editTeacherSearch,
+                            ["courseCode", "subject"],
+                          ).map((course) => {
+                            const courseTeachers = teachers.filter(
+                              (t) => t.courseId === course.id,
+                            );
+                            return (
+                              <div
+                                key={course.id}
+                                onClick={() => {
+                                  setEditClassTeacher({
+                                    courseId: course.id,
+                                    courseCode: course.courseCode,
+                                    courseName: course.subject,
+                                    teachers: courseTeachers,
+                                    newTeacherSearch: "",
+                                    selectedNewTeacher: null,
+                                  });
+                                  setEditTeacherSearch("");
+                                }}
+                                style={{
+                                  padding: "10px",
+                                  cursor: "pointer",
+                                  borderBottom: "1px solid #eee",
+                                  backgroundColor: "#fff",
+                                  transition: "background-color 0.2s",
+                                }}
+                                onMouseEnter={(e) =>
+                                  (e.target.style.backgroundColor = "#f5f5f5")
+                                }
+                                onMouseLeave={(e) =>
+                                  (e.target.style.backgroundColor = "#fff")
+                                }
+                              >
+                                {course.courseCode} - {course.subject}
+                                {courseTeachers.length > 0 && (
+                                  <span
+                                    style={{
+                                      color: "#666",
+                                      fontSize: "12px",
+                                      display: "block",
+                                      marginTop: "4px",
+                                    }}
+                                  >
+                                    Teachers:{" "}
+                                    {courseTeachers
+                                      .map((t) => t.name)
+                                      .join(", ")}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                           {courses.filter(
                             (course) =>
                               course.courseCode
@@ -2140,8 +2349,8 @@ export default function ClassDetailsPage({ params }) {
                               overflowY: "auto",
                             }}
                           >
-                            {allTeachers
-                              .filter(
+                            {sortByMatchPosition(
+                              allTeachers.filter(
                                 (teacher) =>
                                   !editClassTeacher.teachers?.some(
                                     (t) => t.teacherId === teacher.id,
@@ -2151,80 +2360,78 @@ export default function ClassDetailsPage({ params }) {
                                     .includes(
                                       editClassTeacher.newTeacherSearch.toLowerCase(),
                                     ) ||
-                                    teacher.mobile
+                                    String(teacher.mobile || "")
                                       .toLowerCase()
                                       .includes(
                                         editClassTeacher.newTeacherSearch.toLowerCase(),
                                       )),
-                              )
-                              .map((teacher) => (
-                                <div
-                                  key={teacher.id}
-                                  onClick={async () => {
-                                    try {
-                                      const res = await apiCall(
-                                        "/api/class-teachers",
-                                        {
-                                          method: "POST",
-                                          body: JSON.stringify({
-                                            classId: parseInt(id),
-                                            teacherId: teacher.id,
-                                            courseId: editClassTeacher.courseId,
-                                          }),
-                                        },
-                                      );
-                                      const data = await res.json();
-                                      if (data.success) {
-                                        alert("Teacher added successfully!");
-                                        const newTeacher = {
-                                          classTeacherId: data.assignment.id,
+                              ),
+                              editClassTeacher.newTeacherSearch,
+                              ["name", "mobile"],
+                            ).map((teacher) => (
+                              <div
+                                key={teacher.id}
+                                onClick={async () => {
+                                  try {
+                                    const res = await apiCall(
+                                      "/api/class-teachers",
+                                      {
+                                        method: "POST",
+                                        body: JSON.stringify({
+                                          classId: parseInt(id),
                                           teacherId: teacher.id,
-                                          name: teacher.name,
-                                          mobile: teacher.mobile,
                                           courseId: editClassTeacher.courseId,
-                                          courseCode:
-                                            editClassTeacher.courseCode,
-                                          courseName:
-                                            editClassTeacher.courseName,
-                                        };
-                                        setEditClassTeacher({
-                                          ...editClassTeacher,
-                                          teachers: [
-                                            ...(editClassTeacher.teachers ||
-                                              []),
-                                            newTeacher,
-                                          ],
-                                          newTeacherSearch: "",
-                                          selectedNewTeacher: null,
-                                        });
-                                        fetchClassTeachers();
-                                      } else {
-                                        alert("Error: " + data.message);
-                                      }
-                                    } catch (error) {
-                                      alert(
-                                        "Failed to add teacher: " +
-                                          error.message,
-                                      );
+                                        }),
+                                      },
+                                    );
+                                    const data = await res.json();
+                                    if (data.success) {
+                                      alert("Teacher added successfully!");
+                                      const newTeacher = {
+                                        classTeacherId: data.assignment.id,
+                                        teacherId: teacher.id,
+                                        name: teacher.name,
+                                        mobile: teacher.mobile,
+                                        courseId: editClassTeacher.courseId,
+                                        courseCode: editClassTeacher.courseCode,
+                                        courseName: editClassTeacher.courseName,
+                                      };
+                                      setEditClassTeacher({
+                                        ...editClassTeacher,
+                                        teachers: [
+                                          ...(editClassTeacher.teachers || []),
+                                          newTeacher,
+                                        ],
+                                        newTeacherSearch: "",
+                                        selectedNewTeacher: null,
+                                      });
+                                      fetchClassTeachers();
+                                    } else {
+                                      alert("Error: " + data.message);
                                     }
-                                  }}
-                                  style={{
-                                    padding: "10px",
-                                    cursor: "pointer",
-                                    borderBottom: "1px solid #eee",
-                                    backgroundColor: "#fff",
-                                    transition: "background-color 0.2s",
-                                  }}
-                                  onMouseEnter={(e) =>
-                                    (e.target.style.backgroundColor = "#f5f5f5")
+                                  } catch (error) {
+                                    alert(
+                                      "Failed to add teacher: " + error.message,
+                                    );
                                   }
-                                  onMouseLeave={(e) =>
-                                    (e.target.style.backgroundColor = "#fff")
-                                  }
-                                >
-                                  {teacher.name} ({teacher.mobile})
-                                </div>
-                              ))}
+                                }}
+                                style={{
+                                  padding: "10px",
+                                  cursor: "pointer",
+                                  borderBottom: "1px solid #eee",
+                                  backgroundColor: "#fff",
+                                  transition: "background-color 0.2s",
+                                }}
+                                onMouseEnter={(e) =>
+                                  (e.target.style.backgroundColor = "#f5f5f5")
+                                }
+                                onMouseLeave={(e) =>
+                                  (e.target.style.backgroundColor = "#fff")
+                                }
+                              >
+                                {teacher.name} ({teacher.mobile})
+                              </div>
+                            ))}
                             {allTeachers.filter(
                               (teacher) =>
                                 !editClassTeacher.teachers?.some(
@@ -2419,8 +2626,8 @@ export default function ClassDetailsPage({ params }) {
                             const courseTeachers = teachers.filter(
                               (t) => t.courseId === modalTeacher.courseId,
                             );
-                            return allTeachers
-                              .filter(
+                            return sortByMatchPosition(
+                              allTeachers.filter(
                                 (teacher) =>
                                   !courseTeachers.some(
                                     (t) => t.teacherId === teacher.id,
@@ -2430,63 +2637,64 @@ export default function ClassDetailsPage({ params }) {
                                     .includes(
                                       modalTeacher.newTeacherSearch.toLowerCase(),
                                     ) ||
-                                    teacher.mobile
+                                    String(teacher.mobile || "")
                                       .toLowerCase()
                                       .includes(
                                         modalTeacher.newTeacherSearch.toLowerCase(),
                                       )),
-                              )
-                              .map((teacher) => (
-                                <div
-                                  key={teacher.id}
-                                  onClick={async () => {
-                                    try {
-                                      const res = await apiCall(
-                                        "/api/class-teachers",
-                                        {
-                                          method: "POST",
-                                          body: JSON.stringify({
-                                            classId: parseInt(id),
-                                            teacherId: teacher.id,
-                                            courseId: modalTeacher.courseId,
-                                          }),
-                                        },
-                                      );
-                                      const data = await res.json();
-                                      if (data.success) {
-                                        alert("Teacher added successfully!");
-                                        setModalTeacher({
-                                          ...modalTeacher,
-                                          newTeacherSearch: "",
-                                        });
-                                        fetchClassTeachers();
-                                      } else {
-                                        alert("Error: " + data.message);
-                                      }
-                                    } catch (error) {
-                                      alert(
-                                        "Failed to add teacher: " +
-                                          error.message,
-                                      );
+                              ),
+                              modalTeacher.newTeacherSearch,
+                              ["name", "mobile"],
+                            ).map((teacher) => (
+                              <div
+                                key={teacher.id}
+                                onClick={async () => {
+                                  try {
+                                    const res = await apiCall(
+                                      "/api/class-teachers",
+                                      {
+                                        method: "POST",
+                                        body: JSON.stringify({
+                                          classId: parseInt(id),
+                                          teacherId: teacher.id,
+                                          courseId: modalTeacher.courseId,
+                                        }),
+                                      },
+                                    );
+                                    const data = await res.json();
+                                    if (data.success) {
+                                      alert("Teacher added successfully!");
+                                      setModalTeacher({
+                                        ...modalTeacher,
+                                        newTeacherSearch: "",
+                                      });
+                                      fetchClassTeachers();
+                                    } else {
+                                      alert("Error: " + data.message);
                                     }
-                                  }}
-                                  style={{
-                                    padding: "10px",
-                                    cursor: "pointer",
-                                    borderBottom: "1px solid #eee",
-                                    backgroundColor: "#fff",
-                                    transition: "background-color 0.2s",
-                                  }}
-                                  onMouseEnter={(e) =>
-                                    (e.target.style.backgroundColor = "#f5f5f5")
+                                  } catch (error) {
+                                    alert(
+                                      "Failed to add teacher: " + error.message,
+                                    );
                                   }
-                                  onMouseLeave={(e) =>
-                                    (e.target.style.backgroundColor = "#fff")
-                                  }
-                                >
-                                  {teacher.name} ({teacher.mobile})
-                                </div>
-                              ));
+                                }}
+                                style={{
+                                  padding: "10px",
+                                  cursor: "pointer",
+                                  borderBottom: "1px solid #eee",
+                                  backgroundColor: "#fff",
+                                  transition: "background-color 0.2s",
+                                }}
+                                onMouseEnter={(e) =>
+                                  (e.target.style.backgroundColor = "#f5f5f5")
+                                }
+                                onMouseLeave={(e) =>
+                                  (e.target.style.backgroundColor = "#fff")
+                                }
+                              >
+                                {teacher.name} ({teacher.mobile})
+                              </div>
+                            ));
                           })()}
                           {(() => {
                             const courseTeachers = teachers.filter(
@@ -2616,6 +2824,9 @@ export default function ClassDetailsPage({ params }) {
             <div style={{ width: "100%" }}>
               {/* Student Search Section */}
               <div className="search-section" style={{ marginBottom: "20px" }}>
+                <h3 style={{ marginBottom: "10px", fontSize: "16px", fontWeight: "600", color: "#333" }}>
+                  Student Absent Details
+                </h3>
                 <input
                   type="text"
                   value={attendanceSearch}
@@ -2643,8 +2854,8 @@ export default function ClassDetailsPage({ params }) {
                     overflowY: "auto",
                   }}
                 >
-                  {students
-                    .filter(
+                  {sortByMatchPosition(
+                    students.filter(
                       (student) =>
                         student.studentName
                           .toLowerCase()
@@ -2652,28 +2863,30 @@ export default function ClassDetailsPage({ params }) {
                         student.regNo
                           .toLowerCase()
                           .includes(attendanceSearch.toLowerCase()),
-                    )
-                    .map((student) => (
-                      <div
-                        key={student.id}
-                        onClick={() => handleSelectStudent(student)}
-                        style={{
-                          padding: "10px",
-                          cursor: "pointer",
-                          borderBottom: "1px solid #eee",
-                          backgroundColor: "#fff",
-                          transition: "background-color 0.2s",
-                        }}
-                        onMouseEnter={(e) =>
-                          (e.target.style.backgroundColor = "#f5f5f5")
-                        }
-                        onMouseLeave={(e) =>
-                          (e.target.style.backgroundColor = "#fff")
-                        }
-                      >
-                        {student.studentName} (Reg: {student.regNo})
-                      </div>
-                    ))}
+                    ),
+                    attendanceSearch,
+                    ["studentName", "regNo"],
+                  ).map((student) => (
+                    <div
+                      key={student.id}
+                      onClick={() => handleSelectStudent(student)}
+                      style={{
+                        padding: "10px",
+                        cursor: "pointer",
+                        borderBottom: "1px solid #eee",
+                        backgroundColor: "#fff",
+                        transition: "background-color 0.2s",
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.target.style.backgroundColor = "#f5f5f5")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.target.style.backgroundColor = "#fff")
+                      }
+                    >
+                      {student.studentName} (Reg: {student.regNo})
+                    </div>
+                  ))}
                   {students.filter(
                     (student) =>
                       student.studentName
@@ -2775,6 +2988,26 @@ export default function ClassDetailsPage({ params }) {
                   )}
                 </div>
               )}
+
+              {/* Attendance Charts */}
+              <div
+                style={{
+                  display: "flex",
+                  gap: "30px",
+                  marginTop: "40px",
+                  justifyContent: "space-between",
+                }}
+              >
+                <ClassAttendanceBarChart
+                  histogramData={attendanceHistogramData}
+                  totalStudents={students.length}
+                />
+                <ClassAttendancePieChart
+                  aboveThreshold={attendancePieData.aboveThreshold}
+                  belowThreshold={attendancePieData.belowThreshold}
+                  totalStudents={attendancePieData.totalStudents}
+                />
+              </div>
             </div>
           )}
         </div>

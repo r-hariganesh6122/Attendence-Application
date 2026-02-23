@@ -8,22 +8,19 @@ import {
   Cell,
 } from "recharts";
 
-export default function DashboardPieChart({
-  presentDays,
-  absentDays,
-  holidayDays,
+export default function ClassAttendancePieChart({
+  aboveThreshold,
+  belowThreshold,
   totalStudents = 0,
-  showTotalStudents = false,
 }) {
-  // Prepare data for pie chart
+  // Prepare data for pie chart (>75% vs <75%)
   const data = [
-    { name: "Present", value: presentDays, count: presentDays },
-    { name: "Absent", value: absentDays, count: absentDays },
-    { name: "Holiday", value: holidayDays, count: holidayDays },
+    { name: ">75% Attendance", value: aboveThreshold, count: aboveThreshold },
+    { name: "<75% Attendance", value: belowThreshold, count: belowThreshold },
   ].filter((item) => item.value > 0); // Only show segments with value > 0
 
-  // Color scheme: green for present, red for absent, orange for holiday
-  const colors = ["#27ae60", "#e74c3c", "#f39c12"];
+  // Color scheme: green for above threshold, red for below threshold
+  const colors = ["#27ae60", "#e74c3c"];
 
   // Calculate total for percentage
   const total = data.reduce((sum, item) => sum + item.value, 0);
@@ -104,47 +101,43 @@ export default function DashboardPieChart({
               <Cell key={`cell-${index}`} fill={colors[index]} />
             ))}
           </Pie>
-          <text
-            x="50%"
-            y="45%"
-            textAnchor="middle"
-            dominantBaseline="middle"
-            style={{
-              fontSize: "32px",
-              fontWeight: "bold",
-              fill: "#333",
-            }}
-          >
-            {showTotalStudents ? totalStudents : total}
-          </text>
           <Tooltip
             contentStyle={{
               backgroundColor: "#fff",
               border: "1px solid #ccc",
               borderRadius: "4px",
               padding: "8px",
-              fontSize: "12px",
             }}
-            formatter={(value) => `${value} students`}
-            labelFormatter={(label) => `${label}`}
+            formatter={(value, name, props) => [
+              `${value} students`,
+              props.payload.name,
+            ]}
           />
           <Legend
-            wrapperStyle={{
-              paddingTop: "20px",
-              display: "flex",
-              justifyContent: "center",
-              gap: "25px",
-              fontSize: "13px",
-            }}
-            layout="horizontal"
             verticalAlign="bottom"
-            formatter={(value, entry) => {
-              const item = data.find((d) => d.name === value);
-              return `${value} ${item ? item.count : 0}`;
-            }}
+            height={36}
+            formatter={(value, entry) =>
+              `${entry.payload.name} (${entry.payload.count})`
+            }
           />
         </PieChart>
       </ResponsiveContainer>
+      {totalStudents > 0 && (
+        <div
+          style={{
+            marginTop: "20px",
+            padding: "10px 20px",
+            backgroundColor: "#f5f5f5",
+            borderRadius: "4px",
+            textAlign: "center",
+            width: "100%",
+          }}
+        >
+          <p style={{ margin: "0", fontSize: "14px", color: "#666" }}>
+            Total Students: <strong>{totalStudents}</strong>
+          </p>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,6 +7,52 @@ import "../attendance.css";
 import DashboardBarChart from "./DashboardBarChart";
 import DashboardPieChart from "./DashboardPieChart";
 
+// Helper function to sort array by search match position
+function sortByMatchPosition(items, searchQuery, fieldNames = []) {
+  if (!searchQuery.trim()) return items;
+
+  const search = searchQuery.toLowerCase();
+
+  return [...items].sort((a, b) => {
+    // Get all possible values to search in for each item
+    let aValues = fieldNames.map((field) => {
+      const value = a[field];
+      return value ? String(value).toLowerCase() : "";
+    });
+
+    let bValues = fieldNames.map((field) => {
+      const value = b[field];
+      return value ? String(value).toLowerCase() : "";
+    });
+
+    // Find the minimum position of match for item a
+    let aMinPos = Math.min(
+      ...aValues.map((val) => {
+        const pos = val.indexOf(search);
+        return pos === -1 ? Infinity : pos;
+      }),
+    );
+
+    // Find the minimum position of match for item b
+    let bMinPos = Math.min(
+      ...bValues.map((val) => {
+        const pos = val.indexOf(search);
+        return pos === -1 ? Infinity : pos;
+      }),
+    );
+
+    // If positions are different, sort by position
+    if (aMinPos !== bMinPos) {
+      return aMinPos - bMinPos;
+    }
+
+    // If positions are the same, sort alphabetically by the first field
+    const aFirst = aValues[0] || "";
+    const bFirst = bValues[0] || "";
+    return aFirst.localeCompare(bFirst);
+  });
+}
+
 export default function AdminDashboard({ user, onLogout }) {
   // State for change password form
   const [changePasswordMobile, setChangePasswordMobile] = useState("");
@@ -978,9 +1024,12 @@ export default function AdminDashboard({ user, onLogout }) {
       if (type === "class" && cls) {
         classes = classes.filter((c) => c.id === cls.id);
       }
-
       report[dept.name] = {};
+      report[dept.name].__totalStudents = {};
       for (const classItem of classes) {
+        // Initialize total students count to 0
+        report[dept.name].__totalStudents[classItem.name] = 0;
+
         // Fetch all holiday locks for this class
         const resHolidayLocks = await apiCall(
           `/api/holiday-lock?classId=${classItem.id}&listAll=true`,
@@ -1114,6 +1163,15 @@ export default function AdminDashboard({ user, onLogout }) {
             });
         }
         report[dept.name][classItem.name] = absences;
+        // Store total students count for this class
+        if (dataAttendance.success && dataAttendance.students) {
+          const { students } = dataAttendance;
+          report[dept.name].__totalStudents[classItem.name] = students.length;
+        } else {
+          // Ensure count is set to 0 if API call failed
+          report[dept.name].__totalStudents[classItem.name] =
+            report[dept.name].__totalStudents[classItem.name] || 0;
+        }
       }
     }
 
@@ -1380,7 +1438,8 @@ export default function AdminDashboard({ user, onLogout }) {
         ? `<img src="${logoDataUrl}" alt="PEC Logo" style="width: 80px; height: 80px; object-fit: contain;">`
         : '<img src="/2.PEC.png" alt="PEC Logo" style="width: 80px; height: 80px; object-fit: contain;">';
 
-      let printContent = `
+      let printContent = "";
+      printContent = `
         <html>
           <head>
             <title>Absence Report - ${dateStr}</title>
@@ -1536,10 +1595,24 @@ export default function AdminDashboard({ user, onLogout }) {
       if (reportDateMode === "range") {
         // For date range - organize by date first, then departments and classes
         const reportByDate = {};
+        const classStudentCountMap = {}; // Map to store total students per class
+
+        // Extract totalStudents metadata first
+        Object.entries(report).forEach(([deptName, absencesByClass]) => {
+          if (absencesByClass && absencesByClass.__totalStudents) {
+            classStudentCountMap[deptName] = absencesByClass.__totalStudents;
+          }
+        });
 
         // Reorganize data by date
         Object.entries(report).forEach(([deptName, absencesByClass]) => {
+          if (!absencesByClass || typeof absencesByClass !== "object") return;
+
           Object.entries(absencesByClass).forEach(([className, absences]) => {
+            // Skip metadata keys
+            if (className === "__totalStudents" || !Array.isArray(absences))
+              return;
+
             absences.forEach((student) => {
               // Extract just the date part (YYYY-MM-DD format)
               let dateKey = "Unknown";
@@ -1620,30 +1693,58 @@ export default function AdminDashboard({ user, onLogout }) {
             if (reportType !== "class") {
               const summaryData = {};
               let totalAbsencesThisDate = 0;
+              let totalStrengthThisDate = 0;
+              let totalPresentThisDate = 0;
 
               Object.entries(deptsOnDate).forEach(
                 ([deptName, classesOnDate]) => {
-                  let deptTotal = 0;
+                  let deptAbsent = 0;
+                  let deptStrength = 0;
+                  let deptPresent = 0;
                   Object.entries(classesOnDate).forEach(
                     ([className, absences]) => {
+                      if (!Array.isArray(absences)) return;
+
                       // Check if this class is all holidays
                       const allClassHolidays = absences.every(
                         (s) => s.isHoliday,
                       );
-                      const classAbsences = allClassHolidays
-                        ? "Holiday"
-                        : absences.length;
+
+                      // Get total students for this class from map
+                      const totalStudents =
+                        (classStudentCountMap[deptName] &&
+                          classStudentCountMap[deptName][className]) ||
+                        0;
+                      const absentCount = allClassHolidays
+                        ? 0
+                        : absences.filter((s) => !s.isHoliday).length;
+                      const presentCount = totalStudents - absentCount;
+
                       if (!summaryData[deptName]) {
                         summaryData[deptName] = {};
                       }
-                      summaryData[deptName][className] = classAbsences;
+                      summaryData[deptName][className] = {
+                        totalStrength: totalStudents,
+                        present: presentCount,
+                        absent: absentCount,
+                        isHoliday: allClassHolidays,
+                      };
+
                       if (!allClassHolidays) {
-                        deptTotal += absences.length;
-                        totalAbsencesThisDate += absences.length;
+                        deptAbsent += absentCount;
+                        deptStrength += totalStudents;
+                        deptPresent += presentCount;
+                        totalAbsencesThisDate += absentCount;
+                        totalStrengthThisDate += totalStudents;
+                        totalPresentThisDate += presentCount;
                       }
                     },
                   );
-                  summaryData[deptName]["__total"] = deptTotal;
+                  summaryData[deptName]["__total"] = {
+                    totalStrength: deptStrength,
+                    present: deptPresent,
+                    absent: deptAbsent,
+                  };
                 },
               );
 
@@ -1655,7 +1756,9 @@ export default function AdminDashboard({ user, onLogout }) {
                       <tr>
                         <th>Department</th>
                         <th>Class</th>
-                        <th>Number of Absentees</th>
+                        <th>Total Strength</th>
+                        <th>Present</th>
+                        <th>Absent</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1668,12 +1771,24 @@ export default function AdminDashboard({ user, onLogout }) {
                     .filter(([key]) => key !== "__total")
                     .sort();
 
-                  classes.forEach(([className, count], idx) => {
+                  classes.forEach(([className, classStats], idx) => {
+                    const displayStrength = classStats.isHoliday
+                      ? "Holiday"
+                      : classStats.totalStrength;
+                    const displayPresent = classStats.isHoliday
+                      ? "-"
+                      : classStats.present;
+                    const displayAbsent = classStats.isHoliday
+                      ? "-"
+                      : classStats.absent;
+
                     printContent += `
                       <tr>
                         <td>${idx === 0 ? deptName : ""}</td>
                         <td>${className}</td>
-                        <td>${count}</td>
+                        <td>${displayStrength}</td>
+                        <td>${displayPresent}</td>
+                        <td>${displayAbsent}</td>
                       </tr>
                     `;
                   });
@@ -1682,7 +1797,9 @@ export default function AdminDashboard({ user, onLogout }) {
                     <tr style="background-color: #e8e8e8; font-weight: bold;">
                       <td>${deptName} Total</td>
                       <td></td>
-                      <td>${deptTotal}</td>
+                      <td>${deptTotal.totalStrength}</td>
+                      <td>${deptTotal.present}</td>
+                      <td>${deptTotal.absent}</td>
                     </tr>
                   `;
                 });
@@ -1691,6 +1808,8 @@ export default function AdminDashboard({ user, onLogout }) {
                   <tr style="background-color: #d0d0d0; font-weight: bold; font-size: 14px;">
                     <td>Date Total</td>
                     <td></td>
+                    <td>${totalStrengthThisDate}</td>
+                    <td>${totalPresentThisDate}</td>
                     <td>${totalAbsencesThisDate}</td>
                   </tr>
                 `;
@@ -1701,12 +1820,24 @@ export default function AdminDashboard({ user, onLogout }) {
                     .filter(([key]) => key !== "__total")
                     .sort();
 
-                  classes.forEach(([className, count]) => {
+                  classes.forEach(([className, classStats]) => {
+                    const displayStrength = classStats.isHoliday
+                      ? "Holiday"
+                      : classStats.totalStrength;
+                    const displayPresent = classStats.isHoliday
+                      ? "-"
+                      : classStats.present;
+                    const displayAbsent = classStats.isHoliday
+                      ? "-"
+                      : classStats.absent;
+
                     printContent += `
                       <tr>
                         <td>${deptName}</td>
                         <td>${className}</td>
-                        <td>${count}</td>
+                        <td>${displayStrength}</td>
+                        <td>${displayPresent}</td>
+                        <td>${displayAbsent}</td>
                       </tr>
                     `;
                   });
@@ -1715,7 +1846,9 @@ export default function AdminDashboard({ user, onLogout }) {
                     <tr style="background-color: #e8e8e8; font-weight: bold;">
                       <td>${deptName} Total</td>
                       <td></td>
-                      <td>${deptTotal}</td>
+                      <td>${deptTotal.totalStrength}</td>
+                      <td>${deptTotal.present}</td>
+                      <td>${deptTotal.absent}</td>
                     </tr>
                   `;
                 });
@@ -1819,26 +1952,61 @@ export default function AdminDashboard({ user, onLogout }) {
         // Calculate summary data
         const summaryData = {};
         let totalInstitutionAbsences = 0;
+        let totalInstitutionStrength = 0;
+        let totalInstitutionPresent = 0;
 
         Object.entries(report).forEach(([deptName, absencesByClass]) => {
-          let deptTotal = 0;
+          let deptAbsent = 0;
+          let deptStrength = 0;
+          let deptPresent = 0;
           Object.entries(absencesByClass).forEach(([className, absences]) => {
+            // Skip metadata keys
+            if (className === "__totalStudents" || !Array.isArray(absences))
+              return;
+
             // Check if this class is all holidays
             const allClassHolidays = absences.every((s) => s.isHoliday);
-            const holidayEntry = absences.find((s) => s.isHoliday);
-            const classAbsences = allClassHolidays
-              ? `🔒 ${holidayEntry?.reason || "Holiday"}`
-              : absences.length;
+
+            // Get total students for this class from report metadata
+            const totalStudents =
+              report[deptName].__totalStudents?.[className] || 0;
+            const absentCount = allClassHolidays
+              ? 0
+              : absences.filter((a) => !a.isHoliday).length;
+            const presentCount = totalStudents - absentCount;
+
             if (!summaryData[deptName]) {
               summaryData[deptName] = {};
             }
-            summaryData[deptName][className] = classAbsences;
-            if (!allClassHolidays) {
-              deptTotal += absences.length;
-              totalInstitutionAbsences += absences.length;
+
+            if (allClassHolidays) {
+              const holidayEntry = absences.find((s) => s.isHoliday);
+              summaryData[deptName][className] = {
+                totalStrength: `🔒 ${holidayEntry?.reason || "Holiday"}`,
+                present: "-",
+                absent: "-",
+                isHoliday: true,
+              };
+            } else {
+              summaryData[deptName][className] = {
+                totalStrength: totalStudents,
+                present: presentCount,
+                absent: absentCount,
+                isHoliday: false,
+              };
+              deptAbsent += absentCount;
+              deptStrength += totalStudents;
+              deptPresent += presentCount;
+              totalInstitutionAbsences += absentCount;
+              totalInstitutionStrength += totalStudents;
+              totalInstitutionPresent += presentCount;
             }
           });
-          summaryData[deptName]["__total"] = deptTotal;
+          summaryData[deptName]["__total"] = {
+            totalStrength: deptStrength,
+            present: deptPresent,
+            absent: deptAbsent,
+          };
         });
 
         // Check if entire institution is on holiday
@@ -1846,6 +2014,10 @@ export default function AdminDashboard({ user, onLogout }) {
         let allInstitutionHoliday = true;
         Object.entries(report).forEach(([deptName, absencesByClass]) => {
           Object.entries(absencesByClass).forEach(([className, absences]) => {
+            // Skip metadata keys
+            if (className === "__totalStudents" || !Array.isArray(absences))
+              return;
+
             absences.forEach((student) => {
               if (student.isHoliday) {
                 institutionHolidayReason =
@@ -1875,7 +2047,9 @@ export default function AdminDashboard({ user, onLogout }) {
                     <tr>
                       <th>Department</th>
                       <th>Class</th>
-                      <th>Number of Absentees</th>
+                      <th>Total Strength</th>
+                      <th>Present</th>
+                      <th>Absent</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1889,14 +2063,14 @@ export default function AdminDashboard({ user, onLogout }) {
                   .filter(([key]) => key !== "__total")
                   .sort();
 
-                classes.forEach(([className, count], idx) => {
-                  const displayCount =
-                    typeof count === "string" ? count : count;
+                classes.forEach(([className, classStats], idx) => {
                   printContent += `
                     <tr>
                       <td>${idx === 0 ? deptName : ""}</td>
                       <td>${className}</td>
-                      <td>${displayCount}</td>
+                      <td>${classStats.totalStrength}</td>
+                      <td>${classStats.present}</td>
+                      <td>${classStats.absent}</td>
                     </tr>
                   `;
                 });
@@ -1906,7 +2080,9 @@ export default function AdminDashboard({ user, onLogout }) {
                   <tr style="background-color: #e8e8e8; font-weight: bold;">
                     <td>${deptName} Total</td>
                     <td></td>
-                    <td>${deptTotal}</td>
+                    <td>${deptTotal.totalStrength}</td>
+                    <td>${deptTotal.present}</td>
+                    <td>${deptTotal.absent}</td>
                   </tr>
                 `;
               });
@@ -1916,6 +2092,8 @@ export default function AdminDashboard({ user, onLogout }) {
                 <tr style="background-color: #d0d0d0; font-weight: bold; font-size: 14px;">
                   <td>Institution Total</td>
                   <td></td>
+                  <td>${totalInstitutionStrength}</td>
+                  <td>${totalInstitutionPresent}</td>
                   <td>${totalInstitutionAbsences}</td>
                 </tr>
               `;
@@ -1927,14 +2105,14 @@ export default function AdminDashboard({ user, onLogout }) {
                   .filter(([key]) => key !== "__total")
                   .sort();
 
-                classes.forEach(([className, count]) => {
-                  const displayCount =
-                    typeof count === "string" ? count : count;
+                classes.forEach(([className, classStats]) => {
                   printContent += `
                     <tr>
                       <td>${deptName}</td>
                       <td>${className}</td>
-                      <td>${displayCount}</td>
+                      <td>${classStats.totalStrength}</td>
+                      <td>${classStats.present}</td>
+                      <td>${classStats.absent}</td>
                     </tr>
                   `;
                 });
@@ -1944,7 +2122,9 @@ export default function AdminDashboard({ user, onLogout }) {
                   <tr style="background-color: #e8e8e8; font-weight: bold;">
                     <td>${deptName} Total</td>
                     <td></td>
-                    <td>${deptTotal}</td>
+                    <td>${deptTotal.totalStrength}</td>
+                    <td>${deptTotal.present}</td>
+                    <td>${deptTotal.absent}</td>
                   </tr>
                 `;
               });
@@ -1973,6 +2153,13 @@ export default function AdminDashboard({ user, onLogout }) {
               let allDeptHoliday = true;
               Object.entries(absencesByClass).forEach(
                 ([className, absences]) => {
+                  // Skip metadata keys
+                  if (
+                    className === "__totalStudents" ||
+                    !Array.isArray(absences)
+                  )
+                    return;
+
                   absences.forEach((student) => {
                     if (student.isHoliday) {
                       deptHolidayReason = student.reason || deptHolidayReason;
@@ -1995,6 +2182,13 @@ export default function AdminDashboard({ user, onLogout }) {
                 printContent += `<div class="department-header">${deptName}</div>`;
                 Object.entries(absencesByClass).forEach(
                   ([className, absences]) => {
+                    // Skip metadata keys
+                    if (
+                      className === "__totalStudents" ||
+                      !Array.isArray(absences)
+                    )
+                      return;
+
                     // Check if this class is all holidays
                     const allClassHolidays = absences.every((s) => s.isHoliday);
                     const holidayEntry = absences.find((s) => s.isHoliday);
@@ -3443,6 +3637,8 @@ export default function AdminDashboard({ user, onLogout }) {
                 presentDays={dashboardHolidayData.presentDays}
                 absentDays={dashboardHolidayData.absentDays}
                 holidayDays={dashboardHolidayData.holidayDays}
+                totalStudents={dashboardStats.totalStudents}
+                showTotalStudents={dashboardDateMode === "range"}
               />
             </div>
           </div>
@@ -3575,90 +3771,93 @@ export default function AdminDashboard({ user, onLogout }) {
                     <div>Mobile</div>
                     <div>Courses Taught</div>
                   </div>
-                  {teachers
-                    .filter((teacher) => {
+                  {sortByMatchPosition(
+                    teachers.filter((teacher) => {
                       const search = teacherSearch.toLowerCase();
                       return (
                         teacher.name.toLowerCase().includes(search) ||
-                        teacher.mobile.toLowerCase().includes(search)
+                        String(teacher.mobile || "")
+                          .toLowerCase()
+                          .includes(search)
                       );
-                    })
-                    .map((teacher, idx) => (
-                      <div key={teacher.id}>
-                        <div className="list-item">
-                          <div>{idx + 1}</div>
-                          <div>{teacher.name}</div>
-                          <div>{teacher.mobile}</div>
-                          <div
+                    }),
+                    teacherSearch,
+                    ["name", "mobile"],
+                  ).map((teacher, idx) => (
+                    <div key={teacher.id}>
+                      <div className="list-item">
+                        <div>{idx + 1}</div>
+                        <div>{teacher.name}</div>
+                        <div>{teacher.mobile}</div>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "10px",
+                            alignItems: "center",
+                          }}
+                        >
+                          <span>
+                            {teacherCourses[teacher.id]?.length || 0} course
+                            {(teacherCourses[teacher.id]?.length || 0) !== 1
+                              ? "s"
+                              : ""}
+                          </span>
+                          <button
+                            onClick={() => fetchTeacherCourses(teacher.id)}
                             style={{
-                              display: "flex",
-                              gap: "10px",
-                              alignItems: "center",
+                              padding: "5px 10px",
+                              backgroundColor: "#e0e0e0",
+                              color: "#333",
+                              border: "none",
+                              borderRadius: "4px",
+                              cursor: "pointer",
+                              fontSize: "16px",
+                              fontWeight: "bold",
                             }}
                           >
-                            <span>
-                              {teacherCourses[teacher.id]?.length || 0} course
-                              {(teacherCourses[teacher.id]?.length || 0) !== 1
-                                ? "s"
-                                : ""}
-                            </span>
-                            <button
-                              onClick={() => fetchTeacherCourses(teacher.id)}
-                              style={{
-                                padding: "5px 10px",
-                                backgroundColor: "#e0e0e0",
-                                color: "#333",
-                                border: "none",
-                                borderRadius: "4px",
-                                cursor: "pointer",
-                                fontSize: "16px",
-                                fontWeight: "bold",
-                              }}
-                            >
-                              {expandedTeacherId === teacher.id ? "v" : "^"}
-                            </button>
-                          </div>
+                            {expandedTeacherId === teacher.id ? "v" : "^"}
+                          </button>
                         </div>
-                        {/* Expanded courses list */}
-                        {expandedTeacherId === teacher.id &&
-                          teacherCourses[teacher.id] && (
-                            <div
-                              style={{
-                                padding: "10px 20px",
-                                backgroundColor: "#f5f5f5",
-                                borderLeft: "4px solid #4CAF50",
-                              }}
-                            >
-                              <strong>Courses Taught:</strong>
-                              {teacherCourses[teacher.id].length === 0 ? (
-                                <p style={{ marginTop: "5px", color: "#999" }}>
-                                  No courses assigned
-                                </p>
-                              ) : (
-                                <ul
-                                  style={{
-                                    marginTop: "8px",
-                                    paddingLeft: "20px",
-                                  }}
-                                >
-                                  {teacherCourses[teacher.id].map(
-                                    (assignment) => (
-                                      <li key={assignment.id}>
-                                        <strong>
-                                          {assignment.course.subject}
-                                        </strong>{" "}
-                                        ({assignment.course.courseCode}) -
-                                        Class:{" "}
-                                        <strong>{assignment.class.name}</strong>
-                                      </li>
-                                    ),
-                                  )}
-                                </ul>
-                              )}
-                            </div>
-                          )}
                       </div>
-                    ))}
+                      {/* Expanded courses list */}
+                      {expandedTeacherId === teacher.id &&
+                        teacherCourses[teacher.id] && (
+                          <div
+                            style={{
+                              padding: "10px 20px",
+                              backgroundColor: "#f5f5f5",
+                              borderLeft: "4px solid #4CAF50",
+                            }}
+                          >
+                            <strong>Courses Taught:</strong>
+                            {teacherCourses[teacher.id].length === 0 ? (
+                              <p style={{ marginTop: "5px", color: "#999" }}>
+                                No courses assigned
+                              </p>
+                            ) : (
+                              <ul
+                                style={{
+                                  marginTop: "8px",
+                                  paddingLeft: "20px",
+                                }}
+                              >
+                                {teacherCourses[teacher.id].map(
+                                  (assignment) => (
+                                    <li key={assignment.id}>
+                                      <strong>
+                                        {assignment.course.subject}
+                                      </strong>{" "}
+                                      ({assignment.course.courseCode}) - Class:{" "}
+                                      <strong>{assignment.class.name}</strong>
+                                    </li>
+                                  ),
+                                )}
+                              </ul>
+                            )}
+                          </div>
+                        )}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -3707,47 +3906,49 @@ export default function AdminDashboard({ user, onLogout }) {
                           boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
                         }}
                       >
-                        {teachers
-                          .filter(
+                        {sortByMatchPosition(
+                          teachers.filter(
                             (teacher) =>
                               teacher.name
                                 .toLowerCase()
                                 .includes(
                                   changePasswordTeacherInput.toLowerCase(),
                                 ) ||
-                              teacher.mobile.includes(
-                                changePasswordTeacherInput,
-                              ),
-                          )
-                          .map((teacher) => (
-                            <div
-                              key={teacher.id}
-                              onClick={() => {
-                                setChangePasswordMobile(teacher.mobile);
-                                setChangePasswordTeacherInput(teacher.name);
-                                setShowTeacherDropdown(false);
-                              }}
-                              style={{
-                                padding: "10px 12px",
-                                cursor: "pointer",
-                                borderBottom: "1px solid #eee",
-                                hover: { backgroundColor: "#f5f5f5" },
-                              }}
-                              onMouseEnter={(e) =>
-                                (e.target.style.backgroundColor = "#f5f5f5")
-                              }
-                              onMouseLeave={(e) =>
-                                (e.target.style.backgroundColor = "white")
-                              }
-                            >
-                              <strong>{teacher.name}</strong>
-                              <span
-                                style={{ marginLeft: "8px", color: "#666" }}
-                              >
-                                ({teacher.mobile})
-                              </span>
-                            </div>
-                          ))}
+                              String(teacher.mobile || "")
+                                .toLowerCase()
+                                .includes(
+                                  changePasswordTeacherInput.toLowerCase(),
+                                ),
+                          ),
+                          changePasswordTeacherInput,
+                          ["name", "mobile"],
+                        ).map((teacher) => (
+                          <div
+                            key={teacher.id}
+                            onClick={() => {
+                              setChangePasswordMobile(teacher.mobile);
+                              setChangePasswordTeacherInput(teacher.name);
+                              setShowTeacherDropdown(false);
+                            }}
+                            style={{
+                              padding: "10px 12px",
+                              cursor: "pointer",
+                              borderBottom: "1px solid #eee",
+                              hover: { backgroundColor: "#f5f5f5" },
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.target.style.backgroundColor = "#f5f5f5")
+                            }
+                            onMouseLeave={(e) =>
+                              (e.target.style.backgroundColor = "white")
+                            }
+                          >
+                            <strong>{teacher.name}</strong>
+                            <span style={{ marginLeft: "8px", color: "#666" }}>
+                              ({teacher.mobile})
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -3904,43 +4105,45 @@ export default function AdminDashboard({ user, onLogout }) {
                         overflowY: "auto",
                       }}
                     >
-                      {teachers
-                        .filter((teacher) =>
+                      {sortByMatchPosition(
+                        teachers.filter((teacher) =>
                           teacher.name
                             .toLowerCase()
                             .includes(selectedTeacherToRemove.toLowerCase()),
-                        )
-                        .map((teacher) => (
-                          <div
-                            key={teacher.id}
-                            onClick={() =>
-                              setSelectedTeacherToRemove(teacher.name)
-                            }
-                            style={{
-                              padding: "10px",
-                              cursor: "pointer",
-                              borderBottom: "1px solid #eee",
-                              backgroundColor:
-                                selectedTeacherToRemove.toLowerCase() ===
-                                teacher.name.toLowerCase()
-                                  ? "#e3f2fd"
-                                  : "#fff",
-                              transition: "background-color 0.2s",
-                            }}
-                            onMouseEnter={(e) =>
-                              (e.target.style.backgroundColor = "#f5f5f5")
-                            }
-                            onMouseLeave={(e) =>
-                              (e.target.style.backgroundColor =
-                                selectedTeacherToRemove.toLowerCase() ===
-                                teacher.name.toLowerCase()
-                                  ? "#e3f2fd"
-                                  : "#fff")
-                            }
-                          >
-                            {teacher.name} ({teacher.mobile})
-                          </div>
-                        ))}
+                        ),
+                        selectedTeacherToRemove,
+                        ["name"],
+                      ).map((teacher) => (
+                        <div
+                          key={teacher.id}
+                          onClick={() =>
+                            setSelectedTeacherToRemove(teacher.name)
+                          }
+                          style={{
+                            padding: "10px",
+                            cursor: "pointer",
+                            borderBottom: "1px solid #eee",
+                            backgroundColor:
+                              selectedTeacherToRemove.toLowerCase() ===
+                              teacher.name.toLowerCase()
+                                ? "#e3f2fd"
+                                : "#fff",
+                            transition: "background-color 0.2s",
+                          }}
+                          onMouseEnter={(e) =>
+                            (e.target.style.backgroundColor = "#f5f5f5")
+                          }
+                          onMouseLeave={(e) =>
+                            (e.target.style.backgroundColor =
+                              selectedTeacherToRemove.toLowerCase() ===
+                              teacher.name.toLowerCase()
+                                ? "#e3f2fd"
+                                : "#fff")
+                          }
+                        >
+                          {teacher.name} ({teacher.mobile})
+                        </div>
+                      ))}
                       {teachers.filter((teacher) =>
                         teacher.name
                           .toLowerCase()
@@ -4324,14 +4527,15 @@ export default function AdminDashboard({ user, onLogout }) {
                 Object.entries(report).map(([deptName, classesByName]) => (
                   <div key={deptName} className="report-section">
                     <div className="report-department-title">{deptName}</div>
-                    {Object.entries(classesByName).map(
-                      ([className, absences]) => (
+                    {Object.entries(classesByName)
+                      .filter(([className]) => className !== "__totalStudents")
+                      .map(([className, absences]) => (
                         <div key={className} className="report-class">
                           <div className="report-class-title">
                             Class: {className} | Total Absences:{" "}
-                            {absences.length}
+                            {Array.isArray(absences) ? absences.length : 0}
                           </div>
-                          {absences.length > 0 ? (
+                          {Array.isArray(absences) && absences.length > 0 ? (
                             absences.map((student, idx) => (
                               <div key={idx} className="report-student">
                                 {student.rollNo} - {student.name} (
@@ -4347,8 +4551,7 @@ export default function AdminDashboard({ user, onLogout }) {
                             </div>
                           )}
                         </div>
-                      ),
-                    )}
+                      ))}
                   </div>
                 ))
               )}
