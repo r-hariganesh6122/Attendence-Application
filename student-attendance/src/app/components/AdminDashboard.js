@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { apiCall } from "@/lib/apiUtils";
 import * as XLSX from "xlsx";
 import "../attendance.css";
+import DashboardBarChart from "./DashboardBarChart";
+import DashboardPieChart from "./DashboardPieChart";
 
 export default function AdminDashboard({ user, onLogout }) {
   // State for change password form
@@ -124,6 +126,14 @@ export default function AdminDashboard({ user, onLogout }) {
     avgAbsent: 0,
     studentsNotOnHoliday: 0,
     avgAttendancePercent: 0,
+  });
+
+  // Chart data states
+  const [dashboardBreakdownData, setDashboardBreakdownData] = useState([]);
+  const [dashboardHolidayData, setDashboardHolidayData] = useState({
+    presentDays: 0,
+    absentDays: 0,
+    holidayDays: 0,
   });
 
   // Dashboard-specific department/class lists
@@ -1299,6 +1309,54 @@ export default function AdminDashboard({ user, onLogout }) {
   // Perform actual report printing (separated to be called after modal confirmation)
   const performPrintReport = async () => {
     try {
+      // Load logo as base64 first with retry logic
+      let logoDataUrl = "";
+      let logoAttempts = 0;
+      const maxAttempts = 3;
+
+      while (!logoDataUrl && logoAttempts < maxAttempts) {
+        try {
+          logoAttempts++;
+          console.log(`Loading logo, attempt ${logoAttempts}/${maxAttempts}`);
+          const response = await fetch("/2.PEC.png", { cache: "no-cache" });
+
+          if (!response.ok) {
+            console.warn(`HTTP Error: ${response.status}`);
+            continue;
+          }
+
+          const blob = await response.blob();
+          console.log(`Blob loaded, size: ${blob.size} bytes`);
+
+          logoDataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = reader.result;
+              console.log(
+                `FileReader completed, data URL length: ${result.length}`,
+              );
+              resolve(result);
+            };
+            reader.onerror = (error) => {
+              console.error("FileReader error:", error);
+              reject(error);
+            };
+            reader.readAsDataURL(blob);
+          });
+
+          console.log("Logo loaded successfully as data URL");
+        } catch (error) {
+          console.error(`Logo load attempt ${logoAttempts} failed:`, error);
+          if (logoAttempts < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, 500)); // Wait 500ms before retry
+          }
+        }
+      }
+
+      if (!logoDataUrl) {
+        console.warn("Could not load logo after all attempts");
+      }
+
       let report;
       let dateStr;
 
@@ -1316,6 +1374,11 @@ export default function AdminDashboard({ user, onLogout }) {
           : reportType === "department"
             ? reportDepartment?.name || "Department"
             : reportClass?.name || "Class";
+
+      // Prepare logo HTML with fallback
+      const logoImg = logoDataUrl
+        ? `<img src="${logoDataUrl}" alt="PEC Logo" style="width: 80px; height: 80px; object-fit: contain;">`
+        : '<img src="/2.PEC.png" alt="PEC Logo" style="width: 80px; height: 80px; object-fit: contain;">';
 
       let printContent = `
         <html>
@@ -1344,6 +1407,42 @@ export default function AdminDashboard({ user, onLogout }) {
                 color: #999;
                 margin-bottom: 15px;
                 font-size: 11px;
+              }
+              .header-section {
+                display: flex;
+                align-items: center;
+                margin-bottom: 25px;
+                padding-bottom: 15px;
+                border-bottom: 2px solid #333;
+                gap: 20px;
+              }
+              .header-logo {
+                flex-shrink: 0;
+              }
+              .header-logo img {
+                width: 80px;
+                height: 80px;
+                object-fit: contain;
+              }
+              .header-content {
+                flex: 1;
+                text-align: center;
+              }
+              .college-name {
+                font-size: 22px;
+                font-weight: bold;
+                color: #8b1538;
+                margin-bottom: 5px;
+              }
+              .college-address {
+                font-size: 12px;
+                color: #333;
+                margin-bottom: 2px;
+              }
+              .college-subtitle {
+                font-size: 11px;
+                color: #666;
+                font-style: italic;
               }
               table {
                 width: 100%;
@@ -1411,10 +1510,24 @@ export default function AdminDashboard({ user, onLogout }) {
                 table { page-break-inside: auto; margin: 12px 0 8px 0; }
                 tr { page-break-inside: avoid; page-break-after: auto; }
                 .department-wrapper { page-break-after: always; margin-bottom: 0; padding-bottom: 20px; }
+                .header-section { display: flex; align-items: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #333; gap: 20px; page-break-after: avoid; }
+                .header-logo { flex-shrink: 0; display: block; }
+                .header-logo img { width: 80px; height: 80px; object-fit: contain; display: block; }
+                .header-content { flex: 1; text-align: center; }
               }
             </style>
           </head>
           <body>
+            <div class="header-section">
+              <div class="header-logo">
+                ${logoImg}
+              </div>
+              <div class="header-content">
+                <div class="college-name">PAAVAI ENGINEERING COLLEGE</div>
+                <div class="college-address">NH-44 Pachal Namakkal Tamil Nadu India 637 018</div>
+                <div class="college-subtitle">Autonomous Institution | Approved By AICTE | Affiliated To Anna University, Chennai</div>
+              </div>
+            </div>
             <h1>Absence Report</h1>
             <div class="report-info">Report Type: ${reportTypeLabel}</div>
             <div class="date">Date: ${dateStr} | Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
@@ -1964,7 +2077,12 @@ export default function AdminDashboard({ user, onLogout }) {
       }
       printWindow.document.write(printContent);
       printWindow.document.close();
-      printWindow.print();
+
+      // Wait for images to render before opening print dialog
+      setTimeout(() => {
+        console.log("Opening print dialog");
+        printWindow.print();
+      }, 1000);
     } catch (error) {
       alert(
         "Failed to generate report. Please check attendance data and try again.",
@@ -2529,6 +2647,8 @@ export default function AdminDashboard({ user, onLogout }) {
                     ? data.classes.map((c) => ({
                         ...c,
                         departmentId: dept.id,
+                        departmentName: dept.name,
+                        programName: dashboardProgram,
                       }))
                     : [],
                 ),
@@ -2538,10 +2658,45 @@ export default function AdminDashboard({ user, onLogout }) {
             allClassesForProgram = classResults.flat();
             classesToFetch = allClassesForProgram;
           } else {
-            // No program filter - fetch all classes
-            const res = await apiCall("/api/classes");
-            const data = await res.json();
-            classesToFetch = data.success ? data.classes : [];
+            // No program filter - fetch all classes through each program
+            const allPrograms = [
+              { id: 1, name: "BE" },
+              { id: 2, name: "BTech" },
+            ];
+            let allClassesWithMetadata = [];
+
+            // Fetch departments and classes for each program
+            const programPromises = allPrograms.map((prog) =>
+              apiCall(`/api/departments?program=${prog.name}`)
+                .then((res) => res.json())
+                .then((data) => {
+                  if (!data.success || !data.departments) return [];
+                  const depts = data.departments;
+
+                  // Fetch classes for all departments in this program
+                  const classPromises = depts.map((dept) =>
+                    apiCall(`/api/classes?departmentId=${dept.id}`)
+                      .then((res) => res.json())
+                      .then((classData) => {
+                        if (!classData.success || !classData.classes) return [];
+                        return classData.classes.map((c) => ({
+                          ...c,
+                          departmentId: dept.id,
+                          departmentName: dept.name,
+                          programName: prog.name,
+                        }));
+                      })
+                      .catch(() => []),
+                  );
+                  return Promise.all(classPromises);
+                })
+                .then((classResults) => classResults.flat())
+                .catch(() => []),
+            );
+
+            const allResults = await Promise.all(programPromises);
+            allClassesWithMetadata = allResults.flat();
+            classesToFetch = allClassesWithMetadata;
           }
         } else if (dashboardType === "program" && dashboardProgram !== "all") {
           // Fetch departments for the selected program fresh from API, then their classes
@@ -2555,13 +2710,16 @@ export default function AdminDashboard({ user, onLogout }) {
           let allClassesForProgram = [];
           const classPromises = relevantDepts.map((dept) =>
             apiCall(`/api/classes?departmentId=${dept.id}`).then((res) =>
-              res
-                .json()
-                .then((data) =>
-                  data.success
-                    ? data.classes.map((c) => ({ ...c, departmentId: dept.id }))
-                    : [],
-                ),
+              res.json().then((data) =>
+                data.success
+                  ? data.classes.map((c) => ({
+                      ...c,
+                      departmentId: dept.id,
+                      departmentName: dept.name,
+                      programName: dashboardProgram,
+                    }))
+                  : [],
+              ),
             ),
           );
           const classResults = await Promise.all(classPromises);
@@ -2577,10 +2735,19 @@ export default function AdminDashboard({ user, onLogout }) {
             classesToFetch = data.classes.map((c) => ({
               ...c,
               departmentId: dashboardDepartment.id,
+              departmentName: dashboardDepartment.name,
+              programName: dashboardProgram,
             }));
           }
         } else if (dashboardType === "class" && dashboardClass) {
-          classesToFetch = [dashboardClass];
+          classesToFetch = [
+            {
+              ...dashboardClass,
+              departmentId: dashboardClass.departmentId,
+              departmentName: dashboardDepartment?.name || "Unknown",
+              programName: dashboardProgram,
+            },
+          ];
         }
 
         // Build a set of Sundays ONLY (applies to all classes)
@@ -2645,6 +2812,11 @@ export default function AdminDashboard({ user, onLogout }) {
           dayCount = workingDays;
         }
 
+        // Initialize breakdown data structures
+        const breakdownMap = {}; // Map to track students per parent entity
+        const breakdownPresentMap = {}; // Map to track present count per parent entity
+        const globalHolidayDates = new Set(); // Track all holiday dates
+
         for (const classItem of classesToFetch) {
           // Fetch students
           const resStudents = await apiCall(
@@ -2687,6 +2859,35 @@ export default function AdminDashboard({ user, onLogout }) {
             ? dataAttendance.attendanceRecords
             : [];
 
+          // Determine parent entity key for breakdown based on dashboardType and selection
+          let parentKey;
+          if (dashboardType === "whole") {
+            // If specific program selected, drill down to departments; otherwise show programs
+            if (dashboardProgram !== "all") {
+              parentKey = classItem.departmentName || "Unknown";
+            } else {
+              parentKey = classItem.programName || "Unknown";
+            }
+          } else if (dashboardType === "program") {
+            parentKey = classItem.departmentName || "Unknown";
+          } else if (dashboardType === "department") {
+            parentKey = classItem.name; // Class name
+          } else if (dashboardType === "class") {
+            parentKey = classItem.name; // Single class
+          }
+
+          // Initialize breakdown maps for this parent if not already exists
+          if (!breakdownMap[parentKey]) {
+            breakdownMap[parentKey] = new Set();
+            breakdownPresentMap[parentKey] = new Set();
+          }
+
+          // Add students to breakdown tracking
+          students.forEach((s) => breakdownMap[parentKey].add(s.id));
+
+          // Track holiday dates globally
+          classHolidayDates.forEach((date) => globalHolidayDates.add(date));
+
           if (dashboardDateMode === "specific") {
             // For specific date:
             // Total Students = students from classes operating on this date (NOT on holiday)
@@ -2709,6 +2910,8 @@ export default function AdminDashboard({ user, onLogout }) {
                 totalAbsent++;
               } else if (record.status === "present") {
                 totalPresent++;
+                // Track present students for breakdown
+                breakdownPresentMap[parentKey].add(record.studentId);
               }
             });
 
@@ -2736,6 +2939,8 @@ export default function AdminDashboard({ user, onLogout }) {
                 globalDailyStats[dateKey].absent++;
               } else if (record.status === "present") {
                 globalDailyStats[dateKey].present++;
+                // Track present students for breakdown
+                breakdownPresentMap[parentKey].add(record.studentId);
               }
             });
 
@@ -2767,6 +2972,37 @@ export default function AdminDashboard({ user, onLogout }) {
             studentsNotOnHoliday = totalPresentRecords + totalAbsentRecords;
           }
         }
+
+        // Build breakdown data for bar chart
+        const breakdownData = Object.entries(breakdownMap).map(
+          ([parentName, studentSet]) => ({
+            name: parentName,
+            total: studentSet.size,
+            present: breakdownPresentMap[parentName]?.size || 0,
+          }),
+        );
+
+        // Sort breakdown data for consistent display
+        breakdownData.sort((a, b) => a.name.localeCompare(b.name));
+
+        // Calculate holiday data for pie chart - use stats calculated above
+        // For date range: use avgPresent, avgAbsent
+        // For specific date: use present, absent
+        // Holiday count: based on studentsFromClassesOnHoliday
+        const pieChartData = {
+          presentDays:
+            dashboardDateMode === "range"
+              ? Math.round(totalPresentSum)
+              : totalPresent,
+          absentDays:
+            dashboardDateMode === "range"
+              ? Math.round(totalAbsentSum)
+              : totalAbsent,
+          holidayDays:
+            studentsFromClassesOnHoliday.size > 0
+              ? studentsFromClassesOnHoliday.size
+              : 0,
+        };
 
         // Calculate final stats
         let avgAttendancePercent = 0;
@@ -2802,6 +3038,8 @@ export default function AdminDashboard({ user, onLogout }) {
         };
 
         setDashboardStats(newStats);
+        setDashboardBreakdownData(breakdownData);
+        setDashboardHolidayData(pieChartData);
       } catch (error) {
         console.error("Failed to fetch dashboard stats:", error);
       }
@@ -3186,6 +3424,26 @@ export default function AdminDashboard({ user, onLogout }) {
                   </div>
                 </>
               )}
+            </div>
+
+            {/* Charts Section */}
+            <div
+              style={{
+                display: "flex",
+                gap: "30px",
+                marginTop: "30px",
+                justifyContent: "space-between",
+              }}
+            >
+              <DashboardBarChart
+                breakdownData={dashboardBreakdownData}
+                cardTotalStudents={dashboardStats.totalStudents}
+              />
+              <DashboardPieChart
+                presentDays={dashboardHolidayData.presentDays}
+                absentDays={dashboardHolidayData.absentDays}
+                holidayDays={dashboardHolidayData.holidayDays}
+              />
             </div>
           </div>
         )}
