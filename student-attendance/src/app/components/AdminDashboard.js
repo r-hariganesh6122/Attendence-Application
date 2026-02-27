@@ -211,6 +211,10 @@ export default function AdminDashboard({ user, onLogout }) {
   const [expandedTeacherId, setExpandedTeacherId] = useState(null); // Track which teacher's courses are expanded
   const [teacherCourses, setTeacherCourses] = useState({}); // Cache of teacher courses
 
+  // Teacher Modal States
+  const [showTeacherModal, setShowTeacherModal] = useState(false);
+  const [modalTeacher, setModalTeacher] = useState(null);
+
   // Attendance Lock Management States
   const [lockManagementTab, setLockManagementTab] = useState("list");
   const [lockManagementSubTab, setLockManagementSubTab] =
@@ -254,6 +258,9 @@ export default function AdminDashboard({ user, onLogout }) {
   const [holidayLockedDates, setHolidayLockedDates] = useState([]);
   const [holidayLockDepartments, setHolidayLockDepartments] = useState([]);
   const [holidayLockClasses, setHolidayLockClasses] = useState([]);
+  const [holidayLockScopeClasses, setHolidayLockScopeClasses] = useState([]);
+  const [isCurrentHolidayDateLocked, setIsCurrentHolidayDateLocked] =
+    useState(false);
 
   // State for attendance submission check
   const [showSubmissionModal, setShowSubmissionModal] = useState(false);
@@ -263,6 +270,79 @@ export default function AdminDashboard({ user, onLogout }) {
   // State for lock confirmation modal
   const [showLockConfirmModal, setShowLockConfirmModal] = useState(false);
   const [lockConfirmAction, setLockConfirmAction] = useState(null); // 'print' or 'export'
+
+  // Helper function to get today's date in YYYY-MM-DD format
+  const getTodayDate = () => {
+    return new Date().toISOString().split("T")[0];
+  };
+
+  // Helper function to validate that the selected date is not in the future
+  const validateDateNotInFuture = (dateStr, setterFunction) => {
+    const newDate = dateStr;
+
+    // Validate that the date is not empty
+    if (!newDate) {
+      alert("Please select a valid date.");
+      return false;
+    }
+
+    // Parse the date and validate it's actually a valid date
+    const [year, month, day] = newDate.split("-").map(Number);
+    const selectedDateObj = new Date(year, month - 1, day);
+
+    // Check if the date is valid by comparing back
+    // (e.g., 31 Feb will become 3 Mar, which doesn't match input)
+    if (
+      selectedDateObj.getFullYear() !== year ||
+      selectedDateObj.getMonth() !== month - 1 ||
+      selectedDateObj.getDate() !== day
+    ) {
+      alert(
+        "Invalid date. Please enter a valid date (e.g., 28 Feb, not 31 Feb).",
+      );
+      return false;
+    }
+
+    // Validate that the selected date is not in the future
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (selectedDateObj > today) {
+      alert(
+        "Future dates are not allowed. Please select today or a past date.",
+      );
+      return false;
+    }
+
+    setterFunction(newDate);
+    return true;
+  };
+
+  // Dashboard date handlers - prevent future dates
+  const handleDashboardDateChange = (newDate) => {
+    validateDateNotInFuture(newDate, setDashboardDate);
+  };
+
+  const handleDashboardDateFromChange = (newDate) => {
+    validateDateNotInFuture(newDate, setDashboardDateFrom);
+  };
+
+  const handleDashboardDateToChange = (newDate) => {
+    validateDateNotInFuture(newDate, setDashboardDateTo);
+  };
+
+  // Report date handlers - prevent future dates
+  const handleReportDateChange = (newDate) => {
+    validateDateNotInFuture(newDate, setReportDate);
+  };
+
+  const handleReportDateFromChange = (newDate) => {
+    validateDateNotInFuture(newDate, setReportDateFrom);
+  };
+
+  const handleReportDateToChange = (newDate) => {
+    validateDateNotInFuture(newDate, setReportDateTo);
+  };
 
   // Fetch teacher courses when expanding a teacher
   const fetchTeacherCourses = async (teacherId) => {
@@ -371,6 +451,73 @@ export default function AdminDashboard({ user, onLogout }) {
 
       if (data.success) {
         alert("Teacher deleted successfully!");
+        setSelectedTeacherToRemove("");
+        fetchTeachers();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to delete teacher: " + error.message);
+    }
+  };
+
+  // Open Teacher Modal for editing
+  const openTeacherModal = (teacher) => {
+    setModalTeacher({
+      id: teacher.id,
+      name: teacher.name,
+      mobile: teacher.mobile,
+    });
+    setShowTeacherModal(true);
+  };
+
+  // Save Teacher from Modal
+  const saveModalTeacher = async () => {
+    if (!modalTeacher.name.trim() || !modalTeacher.mobile.trim()) {
+      alert("Please fill in all required fields");
+      return;
+    }
+
+    try {
+      const res = await apiCall("/api/teachers", {
+        method: "PUT",
+        body: JSON.stringify({
+          teacherId: modalTeacher.id,
+          name: modalTeacher.name,
+          mobile: modalTeacher.mobile,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert("Teacher updated successfully!");
+        setShowTeacherModal(false);
+        setModalTeacher(null);
+        fetchTeachers();
+      } else {
+        alert("Error: " + data.message);
+      }
+    } catch (error) {
+      alert("Failed to update teacher: " + error.message);
+    }
+  };
+
+  // Delete Teacher from Modal
+  const deleteModalTeacher = async () => {
+    if (!confirm("Are you sure you want to delete this teacher?")) {
+      return;
+    }
+
+    try {
+      const res = await apiCall(`/api/teachers?teacherId=${modalTeacher.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert("Teacher deleted successfully!");
+        setShowTeacherModal(false);
+        setModalTeacher(null);
         setSelectedTeacherToRemove("");
         fetchTeachers();
       } else {
@@ -700,7 +847,7 @@ export default function AdminDashboard({ user, onLogout }) {
   // Fetch holiday lock departments based on selected program
   useEffect(() => {
     async function fetchHolidayLockDeptList() {
-      if (!holidayLockProgram || holidayLockProgram === "all") {
+      if (!holidayLockProgram) {
         setHolidayLockDepartments([]);
         setHolidayLockDepartment(null);
         setHolidayLockClass(null);
@@ -708,7 +855,9 @@ export default function AdminDashboard({ user, onLogout }) {
       }
       try {
         const res = await apiCall(
-          `/api/departments?program=${holidayLockProgram}`,
+          holidayLockProgram === "all"
+            ? "/api/departments"
+            : `/api/departments?program=${holidayLockProgram}`,
         );
         const data = await res.json();
         if (data.success) {
@@ -771,14 +920,58 @@ export default function AdminDashboard({ user, onLogout }) {
 
   // Fetch holiday locked dates when holiday lock tab or class changes
   useEffect(() => {
-    if (
-      activeTab === "attendance-lock" &&
-      lockManagementSubTab === "holiday" &&
-      holidayLockClass
-    ) {
+    if (activeTab === "attendance-lock" && lockManagementSubTab === "holiday") {
       fetchHolidayLockedDates();
     }
-  }, [activeTab, lockManagementSubTab, holidayLockClass]);
+  }, [
+    activeTab,
+    lockManagementSubTab,
+    holidayLockType,
+    holidayLockDepartment,
+    holidayLockClass,
+    holidayLockClasses.length,
+  ]);
+
+  // Check if current selected holiday date is locked (ALL classes in scope must be locked)
+  useEffect(() => {
+    if (holidayLockScopeClasses.length === 0) {
+      setIsCurrentHolidayDateLocked(false);
+      return;
+    }
+
+    let dateToCheck = null;
+    if (holidayLockDateMode === "specific" && holidayLockDate) {
+      dateToCheck = holidayLockDate;
+    } else if (
+      holidayLockDateMode === "range" &&
+      holidayLockDateFrom &&
+      holidayLockDateTo
+    ) {
+      dateToCheck = holidayLockDateFrom;
+    }
+
+    if (!dateToCheck) {
+      setIsCurrentHolidayDateLocked(false);
+      return;
+    }
+
+    // Check if ALL classes in the current scope have a lock on this date
+    const allClassesLocked = holidayLockScopeClasses.every((scopeClass) => {
+      return holidayLockedDates.some((lock) => {
+        const lockDate = new Date(lock.date).toISOString().split("T")[0];
+        return lockDate === dateToCheck && lock.classId === scopeClass.id;
+      });
+    });
+
+    setIsCurrentHolidayDateLocked(allClassesLocked);
+  }, [
+    holidayLockDateMode,
+    holidayLockDate,
+    holidayLockDateFrom,
+    holidayLockDateTo,
+    holidayLockedDates,
+    holidayLockScopeClasses,
+  ]);
 
   // Check if current lock date is locked
   useEffect(() => {
@@ -827,12 +1020,28 @@ export default function AdminDashboard({ user, onLogout }) {
           return;
         }
 
+        // Check attendance lock status
         const res = await apiCall(
           `/api/attendance-lock?classId=${classIdToCheck}&date=${lockDate}`,
         );
 
         const data = await res.json();
-        setIsCurrentDateLocked(data.isLocked || false);
+        let isLocked = data.isLocked || false;
+
+        // Also check if this date is a holiday - if so, attendance is effectively locked
+        if (!isLocked) {
+          try {
+            const holidayRes = await apiCall(
+              `/api/holiday-lock?classId=${classIdToCheck}&date=${lockDate}`,
+            );
+            const holidayData = await holidayRes.json();
+            isLocked = isLocked || holidayData.isLocked || false;
+          } catch (error) {
+            // If holiday check fails, continue with attendance lock status
+          }
+        }
+
+        setIsCurrentDateLocked(isLocked);
       } catch (error) {
         console.error("Failed to check lock status:", error);
         setIsCurrentDateLocked(false);
@@ -841,17 +1050,24 @@ export default function AdminDashboard({ user, onLogout }) {
     checkCurrentDateLock();
   }, [lockType, lockClass, lockDepartment, lockDate, lockClasses]);
 
-  // Auto-lock past dates when class is selected
+  // Auto-lock past dates when class is selected (only for admins)
   useEffect(() => {
-    if (lockClass) {
+    if (lockClass && user?.role === "admin") {
       ensurePastDatesLocked(lockClass.id);
       fetchLockedDates();
+    } else if (lockClass) {
+      // Still fetch locked dates for non-admins
+      fetchLockedDates();
     }
-  }, [lockClass]);
+  }, [lockClass, user?.role]);
 
-  // Auto-lock past dates for whole institution or department
+  // Auto-lock past dates for whole institution or department (only for admins)
   useEffect(() => {
     async function autoLockForScope() {
+      if (user?.role !== "admin") {
+        return; // Skip auto-lock for non-admins
+      }
+
       if (lockType === "whole" && lockClasses.length > 0) {
         // Auto-lock all classes for whole institution
         for (const cls of lockClasses) {
@@ -869,7 +1085,7 @@ export default function AdminDashboard({ user, onLogout }) {
       }
     }
     autoLockForScope();
-  }, [lockType, lockDepartment, lockClasses]);
+  }, [lockType, lockDepartment, lockClasses, user?.role]);
 
   // Get all students by department
   const getStudentsByDepartment = (departmentId) => {
@@ -2616,14 +2832,31 @@ export default function AdminDashboard({ user, onLogout }) {
       return;
     }
 
-    if (holidayLockType === "class" && !holidayLockClass) {
+    console.log("Holiday Lock - Sending reason:", holidayLockReason);
+
+    // Derive the effective lock type based on what's actually selected
+    // This avoids relying on async state updates
+    let effectiveLockType = "whole";
+    let effectiveDepartmentId = null;
+    let effectiveClassId = null;
+
+    if (holidayLockClass) {
+      effectiveLockType = "class";
+      effectiveClassId = holidayLockClass.id;
+      effectiveDepartmentId = holidayLockDepartment?.id || null;
+    } else if (holidayLockDepartment) {
+      effectiveLockType = "department";
+      effectiveDepartmentId = holidayLockDepartment.id;
+    }
+
+    if (effectiveLockType === "class" && !effectiveClassId) {
       alert("Please select a class");
       return;
     }
 
     if (
-      (holidayLockType === "department" || holidayLockType === "class") &&
-      !holidayLockDepartment
+      (effectiveLockType === "department" || effectiveLockType === "class") &&
+      !effectiveDepartmentId
     ) {
       alert("Please select a department");
       return;
@@ -2634,13 +2867,23 @@ export default function AdminDashboard({ user, onLogout }) {
       return;
     }
 
+    console.log("Holiday Lock - Effective settings:", {
+      lockType: effectiveLockType,
+      departmentId: effectiveDepartmentId,
+      classId: effectiveClassId,
+      reason: holidayLockReason,
+      selectedClass: holidayLockClass,
+      selectedDept: holidayLockDepartment,
+      stateType: holidayLockType,
+    });
+
     try {
       const res = await apiCall("/api/holiday-lock/bulk-lock", {
         method: "POST",
         body: JSON.stringify({
-          lockType: holidayLockType,
-          departmentId: holidayLockDepartment?.id || null,
-          classId: holidayLockClass?.id || null,
+          lockType: effectiveLockType,
+          departmentId: effectiveDepartmentId,
+          classId: effectiveClassId,
           date: holidayLockDateMode === "specific" ? holidayLockDate : null,
           dateFrom:
             holidayLockDateMode === "range" ? holidayLockDateFrom : null,
@@ -2655,6 +2898,8 @@ export default function AdminDashboard({ user, onLogout }) {
           `Holiday locked successfully for ${data.affectedClasses} class(es)!`,
         );
         setHolidayLockReason("");
+        // Wait a moment for database to sync, then fetch
+        await new Promise((resolve) => setTimeout(resolve, 500));
         fetchHolidayLockedDates();
       } else {
         alert("Error: " + data.message);
@@ -2674,14 +2919,28 @@ export default function AdminDashboard({ user, onLogout }) {
       return;
     }
 
-    if (holidayLockType === "class" && !holidayLockClass) {
+    // Derive the effective lock type based on what's actually selected
+    let effectiveLockType = "whole";
+    let effectiveDepartmentId = null;
+    let effectiveClassId = null;
+
+    if (holidayLockClass) {
+      effectiveLockType = "class";
+      effectiveClassId = holidayLockClass.id;
+      effectiveDepartmentId = holidayLockDepartment?.id || null;
+    } else if (holidayLockDepartment) {
+      effectiveLockType = "department";
+      effectiveDepartmentId = holidayLockDepartment.id;
+    }
+
+    if (effectiveLockType === "class" && !effectiveClassId) {
       alert("Please select a class");
       return;
     }
 
     if (
-      (holidayLockType === "department" || holidayLockType === "class") &&
-      !holidayLockDepartment
+      (effectiveLockType === "department" || effectiveLockType === "class") &&
+      !effectiveDepartmentId
     ) {
       alert("Please select a department");
       return;
@@ -2700,9 +2959,9 @@ export default function AdminDashboard({ user, onLogout }) {
       const res = await apiCall("/api/holiday-lock/bulk-lock", {
         method: "POST",
         body: JSON.stringify({
-          lockType: holidayLockType,
-          departmentId: holidayLockDepartment?.id || null,
-          classId: holidayLockClass?.id || null,
+          lockType: effectiveLockType,
+          departmentId: effectiveDepartmentId,
+          classId: effectiveClassId,
           date: holidayLockDateMode === "specific" ? holidayLockDate : null,
           dateFrom:
             holidayLockDateMode === "range" ? holidayLockDateFrom : null,
@@ -2748,21 +3007,78 @@ export default function AdminDashboard({ user, onLogout }) {
   };
 
   const fetchHolidayLockedDates = async () => {
-    if (holidayLockType !== "class" || !holidayLockClass) {
-      setHolidayLockedDates([]);
-      return;
-    }
-
     try {
-      const res = await apiCall(
-        `/api/holiday-lock?classId=${holidayLockClass.id}&listAll=true`,
-      );
-      const data = await res.json();
-      if (data.success) {
-        setHolidayLockedDates(data.locks || []);
+      let classesToFetch = [];
+
+      // Determine which classes to fetch locks for based on type
+      if (holidayLockType === "whole") {
+        // For whole institution, fetch all available classes
+        if (holidayLockClasses.length > 0) {
+          classesToFetch = holidayLockClasses;
+        } else {
+          setHolidayLockedDates([]);
+          setHolidayLockScopeClasses([]);
+          return;
+        }
+      } else if (holidayLockType === "department") {
+        // For department, use the classes already filtered
+        if (holidayLockDepartment && holidayLockClasses.length > 0) {
+          classesToFetch = holidayLockClasses;
+        } else {
+          setHolidayLockedDates([]);
+          setHolidayLockScopeClasses([]);
+          return;
+        }
+      } else if (holidayLockType === "class") {
+        // For class, fetch just that class
+        if (holidayLockClass) {
+          classesToFetch = [holidayLockClass];
+        } else {
+          setHolidayLockedDates([]);
+          setHolidayLockScopeClasses([]);
+          return;
+        }
+      } else {
+        setHolidayLockedDates([]);
+        setHolidayLockScopeClasses([]);
+        return;
       }
+
+      // Store the classes in the current scope for later comparison
+      setHolidayLockScopeClasses(classesToFetch);
+
+      // Fetch locks for all relevant classes
+      let allLocks = [];
+      for (const cls of classesToFetch) {
+        try {
+          console.log(
+            `Fetching holiday locks for class ${cls.id} (${cls.name})`,
+          );
+          const res = await apiCall(
+            `/api/holiday-lock?classId=${cls.id}&listAll=true`,
+          );
+          const data = await res.json();
+          console.log(
+            `Got ${data.locks?.length || 0} locks for class ${cls.id}:`,
+            data.locks,
+          );
+          if (data.success && data.locks) {
+            allLocks = allLocks.concat(data.locks);
+          }
+        } catch (error) {
+          console.error(
+            `Failed to fetch holiday locks for class ${cls.id}:`,
+            error,
+          );
+        }
+      }
+
+      console.log(`Fetched total ${allLocks.length} holiday locks`, allLocks);
+      setHolidayLockedDates(allLocks);
     } catch (error) {
       console.error("Failed to fetch holiday locked dates:", error);
+      setHolidayLockedDates([]);
+      setHolidayLockScopeClasses([]);
     }
   };
 
@@ -3353,7 +3669,10 @@ export default function AdminDashboard({ user, onLogout }) {
                     <input
                       type="date"
                       value={dashboardDateFrom}
-                      onChange={(e) => setDashboardDateFrom(e.target.value)}
+                      onChange={(e) =>
+                        handleDashboardDateFromChange(e.target.value)
+                      }
+                      max={getTodayDate()}
                       style={{
                         padding: "8px",
                         borderRadius: "4px",
@@ -3375,7 +3694,10 @@ export default function AdminDashboard({ user, onLogout }) {
                     <input
                       type="date"
                       value={dashboardDateTo}
-                      onChange={(e) => setDashboardDateTo(e.target.value)}
+                      onChange={(e) =>
+                        handleDashboardDateToChange(e.target.value)
+                      }
+                      max={getTodayDate()}
                       style={{
                         padding: "8px",
                         borderRadius: "4px",
@@ -3391,7 +3713,8 @@ export default function AdminDashboard({ user, onLogout }) {
                 <input
                   type="date"
                   value={dashboardDate}
-                  onChange={(e) => setDashboardDate(e.target.value)}
+                  onChange={(e) => handleDashboardDateChange(e.target.value)}
+                  max={getTodayDate()}
                   style={{
                     padding: "8px",
                     borderRadius: "4px",
@@ -3770,6 +4093,7 @@ export default function AdminDashboard({ user, onLogout }) {
                     <div>Teacher Name</div>
                     <div>Mobile</div>
                     <div>Courses Taught</div>
+                    <div>Action</div>
                   </div>
                   {sortByMatchPosition(
                     teachers.filter((teacher) => {
@@ -3816,6 +4140,35 @@ export default function AdminDashboard({ user, onLogout }) {
                             }}
                           >
                             {expandedTeacherId === teacher.id ? "v" : "^"}
+                          </button>
+                        </div>
+                        <div>
+                          <button
+                            onClick={() => openTeacherModal(teacher)}
+                            style={{
+                              backgroundColor: "#f5f5f5",
+                              color: "#333",
+                              border: "1px solid #ddd",
+                              borderRadius: "4px",
+                              padding: "6px 10px",
+                              cursor: "pointer",
+                              fontSize: "16px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                            title="Edit Teacher"
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                            >
+                              <path d="M2 14l1-4 9-9a2 2 0 0 1 2.8 0 2 2 0 0 1 0 2.8L5.8 13l-3.8 1z" />
+                            </svg>
                           </button>
                         </div>
                       </div>
@@ -4177,10 +4530,140 @@ export default function AdminDashboard({ user, onLogout }) {
                 </button>
               </div>
             )}
+
+            {/* Teacher Modal */}
+            {showTeacherModal && modalTeacher && (
+              <div
+                style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: "rgba(0, 0, 0, 0.5)",
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  zIndex: 1000,
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: "white",
+                    padding: "30px",
+                    borderRadius: "8px",
+                    width: "90%",
+                    maxWidth: "500px",
+                    boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                  }}
+                >
+                  <h3 style={{ marginBottom: "20px" }}>Edit Teacher</h3>
+
+                  <div className="form-group" style={{ marginBottom: "15px" }}>
+                    <label>Teacher Name</label>
+                    <input
+                      type="text"
+                      value={modalTeacher.name}
+                      onChange={(e) =>
+                        setModalTeacher({
+                          ...modalTeacher,
+                          name: e.target.value,
+                        })
+                      }
+                      placeholder="Enter teacher name"
+                      style={{
+                        width: "100%",
+                        padding: "10px",
+                        borderRadius: "4px",
+                        border: "1px solid #ddd",
+                        fontSize: "14px",
+                      }}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: "20px" }}>
+                    <label>Mobile Number</label>
+                    <input
+                      type="text"
+                      value={modalTeacher.mobile}
+                      onChange={(e) =>
+                        setModalTeacher({
+                          ...modalTeacher,
+                          mobile: e.target.value,
+                        })
+                      }
+                      placeholder="Enter mobile number"
+                      style={{
+                        width: "100%",
+                        padding: "10px",
+                        borderRadius: "4px",
+                        border: "1px solid #ddd",
+                        fontSize: "14px",
+                      }}
+                    />
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "10px",
+                      justifyContent: "flex-end",
+                    }}
+                  >
+                    <button
+                      onClick={() => {
+                        setShowTeacherModal(false);
+                        setModalTeacher(null);
+                      }}
+                      style={{
+                        padding: "10px 20px",
+                        backgroundColor: "#f0f0f0",
+                        color: "#333",
+                        border: "1px solid #ddd",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={deleteModalTeacher}
+                      style={{
+                        padding: "10px 20px",
+                        backgroundColor: "#f44336",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                      }}
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={saveModalTeacher}
+                      style={{
+                        padding: "10px 20px",
+                        backgroundColor: "#4CAF50",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                      }}
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
-
-        {/* Report Tab */}
         {activeTab === "report" && (
           <div className="admin-section">
             <h2>Absence Report</h2>
@@ -4242,7 +4725,10 @@ export default function AdminDashboard({ user, onLogout }) {
                         <input
                           type="date"
                           value={reportDateFrom}
-                          onChange={(e) => setReportDateFrom(e.target.value)}
+                          onChange={(e) =>
+                            handleReportDateFromChange(e.target.value)
+                          }
+                          max={getTodayDate()}
                           style={{
                             padding: "8px",
                             borderRadius: "4px",
@@ -4264,7 +4750,10 @@ export default function AdminDashboard({ user, onLogout }) {
                         <input
                           type="date"
                           value={reportDateTo}
-                          onChange={(e) => setReportDateTo(e.target.value)}
+                          onChange={(e) =>
+                            handleReportDateToChange(e.target.value)
+                          }
+                          max={getTodayDate()}
                           style={{
                             padding: "8px",
                             borderRadius: "4px",
@@ -4280,7 +4769,8 @@ export default function AdminDashboard({ user, onLogout }) {
                     <input
                       type="date"
                       value={reportDate}
-                      onChange={(e) => setReportDate(e.target.value)}
+                      onChange={(e) => handleReportDateChange(e.target.value)}
+                      max={getTodayDate()}
                       style={{
                         padding: "8px",
                         borderRadius: "4px",
@@ -5129,47 +5619,50 @@ export default function AdminDashboard({ user, onLogout }) {
 
                     {/* Department Selector */}
                     {(holidayLockType === "department" ||
-                      holidayLockType === "class") &&
-                      holidayLockProgram && (
-                        <div>
-                          <label
-                            style={{
-                              fontWeight: "bold",
-                              display: "block",
-                              marginBottom: "5px",
-                            }}
-                          >
-                            Select Department:
-                          </label>
-                          <select
-                            value={holidayLockDepartment?.id || ""}
-                            onChange={(e) => {
-                              const dept = holidayLockDepartments.find(
-                                (d) => d.id === parseInt(e.target.value),
-                              );
-                              setHolidayLockDepartment(dept || null);
-                              if (holidayLockType === "class") {
-                                setHolidayLockClass(null);
-                              }
-                            }}
-                            style={{
-                              padding: "8px",
-                              borderRadius: "4px",
-                              border: "1px solid #ddd",
-                              width: "100%",
-                            }}
-                          >
-                            <option value="">-- Select Department --</option>
-                            {holidayLockDepartments.map((dept) => (
-                              <option key={dept.id} value={dept.id}>
-                                {dept.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
+                      holidayLockType === "class") && (
+                      <div>
+                        <label
+                          style={{
+                            fontWeight: "bold",
+                            display: "block",
+                            marginBottom: "5px",
+                          }}
+                        >
+                          Select Department:
+                        </label>
+                        <select
+                          value={holidayLockDepartment?.id || ""}
+                          onChange={(e) => {
+                            const dept = holidayLockDepartments.find(
+                              (d) => d.id === parseInt(e.target.value),
+                            );
+                            setHolidayLockDepartment(dept || null);
+                            if (dept && holidayLockType !== "class") {
+                              // Auto-set to department if a department is selected
+                              setHolidayLockType("department");
+                            }
+                            if (holidayLockType === "class") {
+                              setHolidayLockClass(null);
+                            }
+                          }}
+                          style={{
+                            padding: "8px",
+                            borderRadius: "4px",
+                            border: "1px solid #ddd",
+                            width: "100%",
+                          }}
+                        >
+                          <option value="">-- Select Department --</option>
+                          {holidayLockDepartments.map((dept) => (
+                            <option key={dept.id} value={dept.id}>
+                              {dept.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
-                    {/* Class Selector */}
+                    {/* Class Selector - Only show when class lock type is selected */}
                     {holidayLockType === "class" && holidayLockDepartment && (
                       <div>
                         <label
@@ -5187,7 +5680,11 @@ export default function AdminDashboard({ user, onLogout }) {
                             const cls = holidayLockClasses.find(
                               (c) => c.id === parseInt(e.target.value),
                             );
-                            setHolidayLockClass(cls || null);
+                            if (cls) {
+                              setHolidayLockClass(cls);
+                            } else {
+                              setHolidayLockClass(null);
+                            }
                           }}
                           style={{
                             padding: "8px",
@@ -5207,7 +5704,11 @@ export default function AdminDashboard({ user, onLogout }) {
                     )}
 
                     {/* Reason Input */}
-                    <div>
+                    <div
+                      style={{
+                        gridColumn: "1 / -1",
+                      }}
+                    >
                       <label
                         style={{
                           fontWeight: "bold",
@@ -5217,19 +5718,57 @@ export default function AdminDashboard({ user, onLogout }) {
                       >
                         Reason for Holiday:
                       </label>
-                      <input
-                        type="text"
-                        value={holidayLockReason}
-                        onChange={(e) => setHolidayLockReason(e.target.value)}
-                        placeholder="e.g., National Holiday, Festival"
-                        maxLength="200"
-                        style={{
-                          padding: "8px",
-                          borderRadius: "4px",
-                          border: "1px solid #ddd",
-                          width: "100%",
-                        }}
-                      />
+                      {isCurrentHolidayDateLocked ? (
+                        <div
+                          style={{
+                            padding: "8px",
+                            borderRadius: "4px",
+                            border: "1px solid #ddd",
+                            backgroundColor: "#f5f5f5",
+                            width: "100%",
+                          }}
+                        >
+                          {(() => {
+                            const dateToCheck =
+                              holidayLockDateMode === "specific"
+                                ? holidayLockDate
+                                : holidayLockDateFrom;
+                            const lockedReason = holidayLockedDates.find(
+                              (lock) => {
+                                const lockDate = new Date(lock.date)
+                                  .toISOString()
+                                  .split("T")[0];
+                                return lockDate === dateToCheck;
+                              },
+                            )?.reason;
+                            return (
+                              <p style={{ margin: 0 }}>
+                                {lockedReason || "No reason provided"}
+                              </p>
+                            );
+                          })()}
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          value={holidayLockReason}
+                          onChange={(e) => {
+                            console.log(
+                              "Reason field changed to:",
+                              e.target.value,
+                            );
+                            setHolidayLockReason(e.target.value);
+                          }}
+                          placeholder="e.g., National Holiday, Festival"
+                          maxLength="200"
+                          style={{
+                            padding: "8px",
+                            borderRadius: "4px",
+                            border: "1px solid #ddd",
+                            width: "100%",
+                          }}
+                        />
+                      )}
                     </div>
 
                     {/* Lock/Unlock Buttons - Removed, now at top */}
@@ -5247,22 +5786,41 @@ export default function AdminDashboard({ user, onLogout }) {
                   >
                     <button
                       onClick={() => toggleHolidayLock()}
+                      disabled={isCurrentHolidayDateLocked}
                       className="export-btn"
-                      style={{ backgroundColor: "#e74c3c" }}
+                      style={{
+                        backgroundColor: isCurrentHolidayDateLocked
+                          ? "#bdc3c7"
+                          : "#e74c3c",
+                        cursor: isCurrentHolidayDateLocked
+                          ? "not-allowed"
+                          : "pointer",
+                        opacity: isCurrentHolidayDateLocked ? 0.6 : 1,
+                      }}
                     >
-                      🔒 Lock Holiday
+                      {isCurrentHolidayDateLocked
+                        ? "✓ Already Locked"
+                        : "🔒 Lock Holiday"}
                     </button>
                     <button
                       onClick={() => toggleHolidayUnlock()}
+                      disabled={false}
                       className="export-btn"
-                      style={{ backgroundColor: "#27ae60" }}
+                      style={{
+                        backgroundColor: "#27ae60",
+                        cursor: "pointer",
+                        opacity: 1,
+                      }}
                     >
                       🔓 Unlock Holiday
                     </button>
                   </div>
 
                   {/* View Existing Holiday Locks */}
-                  {holidayLockType === "class" && holidayLockClass && (
+                  {((holidayLockType === "class" && holidayLockClass) ||
+                    (holidayLockType === "department" &&
+                      holidayLockDepartment) ||
+                    holidayLockType === "whole") && (
                     <div style={{ marginTop: "30px" }}>
                       <h3>Existing Holiday Locks</h3>
                       {holidayLockedDates.length > 0 ? (
@@ -5321,7 +5879,7 @@ export default function AdminDashboard({ user, onLogout }) {
                               })
                               .map((lock) => (
                                 <tr
-                                  key={lock.date}
+                                  key={`${lock.classId}_${lock.date}`}
                                   style={{ borderBottom: "1px solid #ecf0f1" }}
                                 >
                                   <td style={{ padding: "10px" }}>
@@ -5341,10 +5899,7 @@ export default function AdminDashboard({ user, onLogout }) {
                                   >
                                     <button
                                       onClick={() =>
-                                        unlockHoliday(
-                                          holidayLockClass.id,
-                                          lock.date,
-                                        )
+                                        unlockHoliday(lock.classId, lock.date)
                                       }
                                       style={{
                                         padding: "5px 10px",
@@ -5365,7 +5920,12 @@ export default function AdminDashboard({ user, onLogout }) {
                         </table>
                       ) : (
                         <p style={{ color: "#7f8c8d", marginTop: "15px" }}>
-                          No holiday locks for this class
+                          No holiday locks for{" "}
+                          {holidayLockType === "whole"
+                            ? "the whole institution"
+                            : holidayLockType === "department"
+                              ? "this department"
+                              : "this class"}
                         </p>
                       )}
                     </div>

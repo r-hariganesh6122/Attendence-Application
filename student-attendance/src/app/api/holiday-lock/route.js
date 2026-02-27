@@ -39,11 +39,22 @@ export async function GET(request) {
 
       const formattedLocks = locks.map((lock) => ({
         id: lock.id,
+        classId: lock.classId,
         date: lock.date.toISOString().split("T")[0],
         reason: lock.reason || "No reason provided",
         lockedBy: lock.lockedByUser?.name || "Unknown",
         lockedAt: lock.lockedAt,
       }));
+
+      console.log("GET /api/holiday-lock - Returning locks:", {
+        classId,
+        lockCount: locks.length,
+        locks: locks.map((l) => ({
+          date: l.date.toISOString().split("T")[0],
+          reason: l.reason,
+          lockedBy: l.lockedBy,
+        })),
+      });
 
       return NextResponse.json({
         success: true,

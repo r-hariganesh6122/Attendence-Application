@@ -70,6 +70,17 @@ export async function POST(request) {
       action, // "lock" or "unlock"
     } = body;
 
+    console.log("Holiday bulk lock - Received body:", {
+      lockType,
+      departmentId,
+      classId,
+      date,
+      dateFrom,
+      dateTo,
+      reason,
+      action,
+    });
+
     if (!lockType) {
       return NextResponse.json(
         { success: false, message: "lockType is required" },
@@ -171,7 +182,7 @@ export async function POST(request) {
         try {
           if (action === "lock") {
             // Create or update holiday lock
-            await prisma.holidayLock.upsert({
+            const lock = await prisma.holidayLock.upsert({
               where: {
                 classId_date: {
                   classId: cId,
@@ -187,9 +198,15 @@ export async function POST(request) {
                 classId: cId,
                 date: dateObj,
                 reason,
+                lockedAt: new Date(),
                 lockedBy: dbUser.id,
               },
             });
+            console.log(`Holiday lock saved for class ${cId}:`, {
+              reason: lock.reason,
+              date: lock.date,
+            });
+            processedCount++;
           } else {
             // Delete holiday lock
             await prisma.holidayLock.delete({
@@ -200,8 +217,8 @@ export async function POST(request) {
                 },
               },
             });
+            processedCount++;
           }
-          processedCount++;
         } catch (error) {
           if (action === "unlock" && error.code === "P2025") {
             // Record not found when trying to delete - that's OK for unlock

@@ -269,6 +269,22 @@ export async function DELETE(request) {
 
     const id = parseInt(teacherId);
 
+    // Delete all related records first to avoid foreign key constraints
+    // Delete ClassTeacher assignments
+    await prisma.classTeacher.deleteMany({
+      where: { teacherId: id },
+    });
+
+    // Delete AttendanceLocks created by this teacher
+    await prisma.attendanceLock.deleteMany({
+      where: { lockedBy: id },
+    });
+
+    // Delete HolidayLocks created by this teacher
+    await prisma.holidayLock.deleteMany({
+      where: { lockedBy: id },
+    });
+
     // Delete teacher
     await prisma.user.delete({
       where: { id },
