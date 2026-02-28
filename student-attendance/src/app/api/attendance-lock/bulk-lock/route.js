@@ -147,36 +147,38 @@ export async function POST(request) {
       );
     }
 
-    // Lock all target classes for the specified date
+    // Lock all target classes for the specified dates
     let lockedCount = 0;
 
-    for (const cId of targetClassIds) {
-      try {
-        await prisma.attendanceLock.upsert({
-          where: {
-            classId_date: {
+    for (const dateObj of datesToLock) {
+      for (const cId of targetClassIds) {
+        try {
+          await prisma.attendanceLock.upsert({
+            where: {
+              classId_date: {
+                classId: cId,
+                date: dateObj,
+              },
+            },
+            update: {
+              isLocked,
+              lockedAt: isLocked ? new Date() : null,
+              lockedBy: isLocked ? dbUser.id : null,
+              reason: isLocked ? reason : null,
+            },
+            create: {
               classId: cId,
               date: dateObj,
+              isLocked,
+              lockedAt: isLocked ? new Date() : null,
+              lockedBy: isLocked ? dbUser.id : null,
+              reason: isLocked ? reason : null,
             },
-          },
-          update: {
-            isLocked,
-            lockedAt: isLocked ? new Date() : null,
-            lockedBy: isLocked ? dbUser.id : null,
-            reason: isLocked ? reason : null,
-          },
-          create: {
-            classId: cId,
-            date: dateObj,
-            isLocked,
-            lockedAt: isLocked ? new Date() : null,
-            lockedBy: isLocked ? dbUser.id : null,
-            reason: isLocked ? reason : null,
-          },
-        });
-        lockedCount++;
-      } catch (error) {
-        console.error(`Failed to lock class ${cId}:`, error);
+          });
+          lockedCount++;
+        } catch (error) {
+          console.error(`Failed to lock class ${cId} on ${dateObj}:`, error);
+        }
       }
     }
 

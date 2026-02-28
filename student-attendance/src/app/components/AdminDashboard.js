@@ -6,6 +6,12 @@ import * as XLSX from "xlsx";
 import "../attendance.css";
 import DashboardBarChart from "./DashboardBarChart";
 import DashboardPieChart from "./DashboardPieChart";
+import { ExcelUploadSection } from "./ExcelUploadSection";
+import {
+  generateTeacherTemplate,
+  validateTeacherExcel,
+  downloadTemplate,
+} from "@/lib/excelUtils";
 
 // Helper function to sort array by search match position
 function sortByMatchPosition(items, searchQuery, fieldNames = []) {
@@ -53,6 +59,43 @@ function sortByMatchPosition(items, searchQuery, fieldNames = []) {
   });
 }
 
+// Helper function to check if an attendance status matches the session filter
+function statusMatchesSessionFilter(status, sessionFilter) {
+  if (sessionFilter === "all") {
+    return status !== "present"; // Count any absence
+  }
+  if (sessionFilter === "morning") {
+    return status === "morningAbsent"; // Only morning absence (not whole day)
+  }
+  if (sessionFilter === "afternoon") {
+    return status === "afternoonAbsent"; // Only afternoon absence (not whole day)
+  }
+  if (sessionFilter === "both") {
+    return status === "bothAbsent"; // Absent for whole day (both sessions)
+  }
+  return false;
+}
+
+// Helper function to check if a student is present in the selected session
+function statusIsPresent(status, sessionFilter) {
+  if (sessionFilter === "all") {
+    return status === "present"; // Only "present" status means present for all sessions
+  }
+  if (sessionFilter === "morning") {
+    // Present in morning if not morningAbsent and not bothAbsent
+    return status !== "morningAbsent" && status !== "bothAbsent";
+  }
+  if (sessionFilter === "afternoon") {
+    // Present in afternoon if not afternoonAbsent and not bothAbsent
+    return status !== "afternoonAbsent" && status !== "bothAbsent";
+  }
+  if (sessionFilter === "both") {
+    // Present for both sessions only if status is "present"
+    return status === "present";
+  }
+  return false;
+}
+
 export default function AdminDashboard({ user, onLogout }) {
   // State for change password form
   const [changePasswordMobile, setChangePasswordMobile] = useState("");
@@ -65,6 +108,7 @@ export default function AdminDashboard({ user, onLogout }) {
   const [showOldPassword, setShowOldPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showNewTeacherPassword, setShowNewTeacherPassword] = useState(false);
 
   // Handler for change password
   const handleChangePassword = async () => {
@@ -163,6 +207,7 @@ export default function AdminDashboard({ user, onLogout }) {
   const [dashboardProgram, setDashboardProgram] = useState("all");
   const [dashboardDepartment, setDashboardDepartment] = useState(null);
   const [dashboardClass, setDashboardClass] = useState(null);
+  const [dashboardSessionFilter, setDashboardSessionFilter] = useState("both"); // "all", "morning", "afternoon", "both"
   const [dashboardStats, setDashboardStats] = useState({
     totalStudents: 0,
     studentsFromClassesOnHoliday: 0,
@@ -173,6 +218,7 @@ export default function AdminDashboard({ user, onLogout }) {
     studentsNotOnHoliday: 0,
     avgAttendancePercent: 0,
   });
+  const [dashboardNoDataReason, setDashboardNoDataReason] = useState(null); // Reason for no data (e.g., "holiday", "sunday", "no_attendance")
 
   // Chart data states
   const [dashboardBreakdownData, setDashboardBreakdownData] = useState([]);
@@ -415,6 +461,15 @@ export default function AdminDashboard({ user, onLogout }) {
       return;
     }
 
+    // Check if mobile number already exists
+    const existingTeacher = teachers.find(
+      (t) => t.mobile === newTeacher.mobile.trim(),
+    );
+    if (existingTeacher) {
+      alert("A teacher with this mobile number already exists");
+      return;
+    }
+
     try {
       const res = await apiCall("/api/teachers", {
         method: "POST",
@@ -478,6 +533,16 @@ export default function AdminDashboard({ user, onLogout }) {
       return;
     }
 
+    // Check if mobile number is already used by another teacher
+    const otherTeacherWithMobile = teachers.find(
+      (t) =>
+        t.mobile === modalTeacher.mobile.trim() && t.id !== modalTeacher.id,
+    );
+    if (otherTeacherWithMobile) {
+      alert("Another teacher with this mobile number already exists");
+      return;
+    }
+
     try {
       const res = await apiCall("/api/teachers", {
         method: "PUT",
@@ -528,12 +593,79 @@ export default function AdminDashboard({ user, onLogout }) {
     }
   };
 
+  // EXCEL HANDLERS FOR TEACHERS
+  const handleValidateTeacherExcel = async (file) => {
+    return validateTeacherExcel(file, teachers);
+  };
+
+  const handleProcessTeacherData = async (validData) => {
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const teacherData of validData) {
+      try {
+        const res = await apiCall("/api/teachers", {
+          method: "POST",
+          body: JSON.stringify(teacherData),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          successCount++;
+        } else {
+          errorCount++;
+          console.error(
+            `Failed to add teacher: ${teacherData.name} - ${data.message}`,
+          );
+        }
+      } catch (error) {
+        errorCount++;
+        console.error(
+          `Error adding teacher: ${teacherData.name} - ${error.message}`,
+        );
+      }
+    }
+
+    alert(
+      `Teachers imported: ${successCount} succeeded${
+        errorCount > 0 ? `, ${errorCount} failed` : ""
+      }`,
+    );
+
+    // Refresh teacher list
+    fetchTeachers();
+  };
+
+  const handleDownloadTeacherTemplate = () => {
+    const workbook = generateTeacherTemplate();
+    downloadTemplate(workbook, "teachers");
+  };
+
   // Fetch teachers on component mount
   useEffect(() => {
     if (activeTab === "teachers") {
       fetchTeachers();
     }
   }, [activeTab]);
+
+  // Fetch minimum attendance date and set it as default for date ranges
+  useEffect(() => {
+    async function fetchMinAttendanceDate() {
+      try {
+        const res = await fetch(`/api/attendance?getMinDate=true`);
+        const data = await res.json();
+        if (data.success && data.minDate) {
+          // Update all three date "from" states with the minimum attendance date
+          setDashboardDateFrom(data.minDate);
+          setReportDateFrom(data.minDate);
+          setLockDateFrom(data.minDate);
+        }
+      } catch (error) {
+        console.error("Error fetching minimum attendance date:", error);
+      }
+    }
+    fetchMinAttendanceDate();
+  }, []);
 
   // Fetch departments for selected program
   useEffect(() => {
@@ -1303,19 +1435,21 @@ export default function AdminDashboard({ user, onLogout }) {
         }
         let absences = [];
 
-        // Add filtered holiday lock information to the report
-        filteredHolidayLocks.forEach((lock) => {
-          absences.push({
-            rollNo: "HOLIDAY",
-            name: `🔒 Holiday - ${lock.reason || "No Reason"}`,
-            residence: "",
-            reason: lock.reason || "No Reason",
-            informed: "",
-            absenceCount: 0,
-            date: lock.date,
-            isHoliday: true,
+        // Add filtered holiday lock information to the report (exclude Sundays)
+        filteredHolidayLocks
+          .filter((lock) => lock.reason !== "Sunday") // Don't show Sundays as holidays in report
+          .forEach((lock) => {
+            absences.push({
+              rollNo: "HOLIDAY",
+              name: `🔒 Holiday - ${lock.reason || "No Reason"}`,
+              residence: "",
+              reason: lock.reason || "No Reason",
+              informed: "",
+              absenceCount: 0,
+              date: lock.date,
+              isHoliday: true,
+            });
           });
-        });
 
         if (dataAttendance.success) {
           const { students, attendanceRecords } = dataAttendance;
@@ -1333,9 +1467,9 @@ export default function AdminDashboard({ user, onLogout }) {
           students.forEach((s) => {
             studentMap[s.id] = s;
           });
-          // Group absences for this class
+          // Group absences for this class - Filter by Hour 1 only for report
           attendanceRecords
-            .filter((r) => r.status === "absent")
+            .filter((r) => r.hour1Absent === true) // Use Hour 1 attendance only
             .forEach((rec) => {
               const studentResidence =
                 studentMap[rec.studentId]?.residence || "";
@@ -1364,16 +1498,32 @@ export default function AdminDashboard({ user, onLogout }) {
                 }
               }
 
+              // Calculate absence count: 0.5 per session absence (Hour 1 determines if morning is absent)
+              let absenceCount = 0;
+              allAttendanceRecords
+                .filter(
+                  (r2) =>
+                    r2.studentId === rec.studentId && r2.hour1Absent === true,
+                )
+                .forEach((r2) => {
+                  // For each session absence (morning or afternoon), count 0.5
+                  if (
+                    r2.status === "morningAbsent" ||
+                    r2.status === "afternoonAbsent"
+                  ) {
+                    absenceCount += 0.5;
+                  } else if (r2.status === "bothAbsent") {
+                    absenceCount += 1.0; // Both sessions = 1.0
+                  }
+                });
+
               absences.push({
                 rollNo: studentMap[rec.studentId]?.rollNo || rec.studentId,
                 name: studentMap[rec.studentId]?.studentName || "",
                 residence: studentResidence,
                 reason: absenceReason,
                 informed: rec.informed || "",
-                absenceCount: allAttendanceRecords.filter(
-                  (r2) =>
-                    r2.studentId === rec.studentId && r2.status === "absent",
-                ).length,
+                absenceCount: absenceCount,
                 date: isDateRange ? rec.date : undefined,
               });
             });
@@ -1857,9 +2007,34 @@ export default function AdminDashboard({ user, onLogout }) {
           });
         });
 
-        // Sort dates in ascending order
+        // Sort dates in ascending order first
         const sortedDates = Object.keys(reportByDate).sort();
-        sortedDates.forEach((dateKey, idx) => {
+
+        // Ensure all classes appear in the summary for each date, even with zero absences
+        Object.entries(report).forEach(([deptName, absencesByClass]) => {
+          if (absencesByClass && absencesByClass.__totalStudents) {
+            Object.entries(absencesByClass.__totalStudents).forEach(
+              ([className]) => {
+                // Add this class to every date with zero absences if it doesn't exist
+                sortedDates.forEach((dateKey) => {
+                  if (!reportByDate[dateKey]) {
+                    reportByDate[dateKey] = {};
+                  }
+                  if (!reportByDate[dateKey][deptName]) {
+                    reportByDate[dateKey][deptName] = {};
+                  }
+                  if (!reportByDate[dateKey][deptName][className]) {
+                    reportByDate[dateKey][deptName][className] = [];
+                  }
+                });
+              },
+            );
+          }
+        });
+
+        // Re-calculate sorted dates after potentially adding new dates
+        const sortedDatesUpdated = Object.keys(reportByDate).sort();
+        sortedDatesUpdated.forEach((dateKey, idx) => {
           // Parse date - dateKey should be in YYYY-MM-DD format
           let dateDisplay = dateKey;
           if (dateKey !== "Unknown") {
@@ -1921,10 +2096,10 @@ export default function AdminDashboard({ user, onLogout }) {
                     ([className, absences]) => {
                       if (!Array.isArray(absences)) return;
 
-                      // Check if this class is all holidays
-                      const allClassHolidays = absences.every(
-                        (s) => s.isHoliday,
-                      );
+                      // Check if this class is all holidays (only if absences exist)
+                      const allClassHolidays =
+                        absences.length > 0 &&
+                        absences.every((s) => s.isHoliday);
 
                       // Get total students for this class from map
                       const totalStudents =
@@ -2103,8 +2278,9 @@ export default function AdminDashboard({ user, onLogout }) {
                 printContent += `<div class="department-header">${deptName}</div>`;
                 Object.entries(classesOnDate).forEach(
                   ([className, absences]) => {
-                    // Check if this class is all holidays
-                    const allClassHolidays = absences.every((s) => s.isHoliday);
+                    // Check if this class is all holidays (only if absences exist)
+                    const allClassHolidays =
+                      absences.length > 0 && absences.every((s) => s.isHoliday);
                     const holidayEntry = absences.find((s) => s.isHoliday);
 
                     printContent += `<div class="class-header">Class: ${className}</div>`;
@@ -2180,8 +2356,9 @@ export default function AdminDashboard({ user, onLogout }) {
             if (className === "__totalStudents" || !Array.isArray(absences))
               return;
 
-            // Check if this class is all holidays
-            const allClassHolidays = absences.every((s) => s.isHoliday);
+            // Check if this class is all holidays (only if absences exist)
+            const allClassHolidays =
+              absences.length > 0 && absences.every((s) => s.isHoliday);
 
             // Get total students for this class from report metadata
             const totalStudents =
@@ -2405,8 +2582,9 @@ export default function AdminDashboard({ user, onLogout }) {
                     )
                       return;
 
-                    // Check if this class is all holidays
-                    const allClassHolidays = absences.every((s) => s.isHoliday);
+                    // Check if this class is all holidays (only if absences exist)
+                    const allClassHolidays =
+                      absences.length > 0 && absences.every((s) => s.isHoliday);
                     const holidayEntry = absences.find((s) => s.isHoliday);
 
                     printContent += `<div class="class-header">Class: ${className}</div>`;
@@ -2529,149 +2707,511 @@ export default function AdminDashboard({ user, onLogout }) {
       }
 
       const workbook = XLSX.utils.book_new();
-      const worksheets = {};
 
-      // Calculate summary data first
-      const summaryData = {};
-      let totalAbsences = 0;
-      Object.entries(report).forEach(([deptName, classesByName]) => {
-        let deptTotal = 0;
-        Object.entries(classesByName).forEach(([className, absences]) => {
-          const classAbsences = absences.length;
-          if (!summaryData[deptName]) {
-            summaryData[deptName] = {};
+      if (reportDateMode === "range") {
+        // For date range - organize by date like print report
+        const reportByDate = {};
+        const classStudentCountMap = {};
+
+        // Extract totalStudents metadata first
+        Object.entries(report).forEach(([deptName, absencesByClass]) => {
+          if (absencesByClass && absencesByClass.__totalStudents) {
+            classStudentCountMap[deptName] = absencesByClass.__totalStudents;
           }
-          summaryData[deptName][className] = classAbsences;
-          deptTotal += classAbsences;
-          totalAbsences += classAbsences;
-        });
-        summaryData[deptName]["__total"] = deptTotal;
-      });
-
-      // Create summary sheet first
-      const summaryRows = [["Absence Report Summary"]];
-      summaryRows.push(["Generated on", new Date().toLocaleString()]);
-      summaryRows.push(["Report Date", dateStr]);
-      summaryRows.push(["Report Type", reportType]);
-      summaryRows.push([]);
-
-      summaryRows.push(["Department", "Class", "Number of Absentees"]);
-      Object.entries(summaryData).forEach(([deptName, classData]) => {
-        const deptTotal = classData["__total"];
-        const classes = Object.entries(classData)
-          .filter(([key]) => key !== "__total")
-          .sort();
-
-        // Add all classes with department name on each row
-        classes.forEach(([className, count]) => {
-          summaryRows.push([deptName, className, count]);
         });
 
-        // Add subtotal row with department name (so it filters with the department)
-        summaryRows.push([deptName, "--- Department Total ---", deptTotal]);
-        summaryRows.push([]); // Empty row for visual separation
-      });
+        // Reorganize data by date
+        Object.entries(report).forEach(([deptName, absencesByClass]) => {
+          if (!absencesByClass || typeof absencesByClass !== "object") return;
 
-      summaryRows.push(["Institution Total", "", totalAbsences]);
+          Object.entries(absencesByClass).forEach(([className, absences]) => {
+            if (className === "__totalStudents" || !Array.isArray(absences))
+              return;
 
-      const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
-      summaryWs["!cols"] = [{ wch: 20 }, { wch: 20 }, { wch: 20 }];
-      // Enable auto-filter on summary sheet (header row at row 6: Department, Class, Number of Absentees)
-      summaryWs["!autofilter"] = { ref: "A6:C499" };
-      // Add summary sheet first
-      XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary");
+            absences.forEach((student) => {
+              let dateKey = "Unknown";
+              if (student.date) {
+                try {
+                  const datePart = student.date.includes("T")
+                    ? student.date.split("T")[0]
+                    : student.date;
+                  dateKey = datePart;
+                } catch (e) {
+                  console.error("Date parsing error:", e);
+                }
+              }
+              if (!reportByDate[dateKey]) {
+                reportByDate[dateKey] = {};
+              }
+              if (!reportByDate[dateKey][deptName]) {
+                reportByDate[dateKey][deptName] = {};
+              }
+              if (!reportByDate[dateKey][deptName][className]) {
+                reportByDate[dateKey][deptName][className] = [];
+              }
+              reportByDate[dateKey][deptName][className].push(student);
+            });
+          });
+        });
 
-      // Create worksheets for each department
-      Object.entries(report).forEach(([deptName, classesByName]) => {
-        const rows = [];
+        // Ensure all classes appear in all dates
+        const sortedDates = Object.keys(reportByDate).sort();
+        Object.entries(report).forEach(([deptName, absencesByClass]) => {
+          if (absencesByClass && absencesByClass.__totalStudents) {
+            Object.entries(absencesByClass.__totalStudents).forEach(
+              ([className]) => {
+                sortedDates.forEach((dateKey) => {
+                  if (!reportByDate[dateKey][deptName]) {
+                    reportByDate[dateKey][deptName] = {};
+                  }
+                  if (!reportByDate[dateKey][deptName][className]) {
+                    reportByDate[dateKey][deptName][className] = [];
+                  }
+                });
+              },
+            );
+          }
+        });
 
-        // Add header
-        rows.push([
-          "Department",
-          deptName,
-          "",
-          "",
-          "",
-          "",
-          new Date().toLocaleDateString(),
-        ]);
-        rows.push([]); // Empty row
+        // Create summary sheet
+        const summaryRows = [["Absence Report Summary - Date Range"]];
+        summaryRows.push(["Date Range", dateStr]);
+        summaryRows.push(["Generated on", new Date().toLocaleString()]);
+        summaryRows.push(["", "", "", "", ""]);
 
-        // Add class data
-        Object.entries(classesByName).forEach(([className, absences]) => {
-          rows.push([`Class: ${className}`, "", "", "", "", "", ""]);
-          rows.push([
-            "S No",
-            "Roll No",
-            "Name",
-            "Residence",
-            "Absence Reason",
-            "Status",
-            "Leaves Taken",
+        const allDatesSorted = Object.keys(reportByDate).sort();
+        let headerRowIndex = summaryRows.length;
+
+        allDatesSorted.forEach((dateKey) => {
+          const deptsOnDate = reportByDate[dateKey];
+          let dateDisplay = dateKey;
+          if (dateKey !== "Unknown") {
+            try {
+              const date = new Date(dateKey + "T00:00:00Z");
+              const day = String(date.getUTCDate()).padStart(2, "0");
+              const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+              const year = date.getUTCFullYear();
+              dateDisplay = `${day}-${month}-${year}`;
+            } catch (e) {
+              dateDisplay = dateKey;
+            }
+          }
+
+          summaryRows.push([`Date: ${dateDisplay}`, "", "", "", ""]);
+          summaryRows.push([
+            "Department",
+            "Class",
+            "Total Strength",
+            "Present",
+            "Absent",
           ]);
 
-          if (absences.length > 0) {
-            absences.forEach((student, idx) => {
-              let status = "Not Informed";
-              if (typeof student.informed === "string") {
-                status =
-                  student.informed.toLowerCase() === "informed"
-                    ? "Informed"
-                    : "Not Informed";
-              } else if (student.informed === true) {
-                status = "Informed";
-              }
+          let dateAbsentTotal = 0;
+          let datePresentTotal = 0;
+          let dateStrengthTotal = 0;
 
-              rows.push([
-                idx + 1,
-                student.rollNo,
-                student.name,
-                student.residence || "",
-                student.reason || "",
-                status,
-                student.leavesTaken || 0,
+          Object.entries(deptsOnDate).forEach(([deptName, classesOnDate]) => {
+            let deptStrengthTotal = 0;
+            let deptPresentTotal = 0;
+            let deptAbsentTotal = 0;
+            const classesArray = [];
+
+            Object.entries(classesOnDate).forEach(([className, absences]) => {
+              if (!Array.isArray(absences)) return;
+
+              const allClassHolidays =
+                absences.length > 0 && absences.every((s) => s.isHoliday);
+              const totalStudents =
+                (classStudentCountMap[deptName] &&
+                  classStudentCountMap[deptName][className]) ||
+                0;
+              const absentCount = allClassHolidays
+                ? 0
+                : absences.filter((s) => !s.isHoliday).length;
+              const presentCount = totalStudents - absentCount;
+              const displayStrength = allClassHolidays
+                ? "Holiday"
+                : totalStudents;
+              const displayPresent = allClassHolidays ? "-" : presentCount;
+              const displayAbsent = allClassHolidays ? "-" : absentCount;
+
+              classesArray.push([
+                String(deptName || "").trim(),
+                String(className || "").trim(),
+                displayStrength,
+                displayPresent,
+                displayAbsent,
               ]);
-            });
-          } else {
-            rows.push(["", "", "No absences", "", "", "", ""]);
-          }
 
-          rows.push([]); // Empty row between classes
+              if (!allClassHolidays) {
+                deptStrengthTotal += totalStudents;
+                deptPresentTotal += presentCount;
+                deptAbsentTotal += absentCount;
+                dateStrengthTotal += totalStudents;
+                datePresentTotal += presentCount;
+                dateAbsentTotal += absentCount;
+              }
+            });
+
+            // Add all classes for this department
+            classesArray.forEach((row) => {
+              summaryRows.push(row);
+            });
+
+            // Add department total row
+            summaryRows.push([
+              String(deptName || "").trim(),
+              "--- Department Total ---",
+              deptStrengthTotal,
+              deptPresentTotal,
+              deptAbsentTotal,
+            ]);
+          });
+
+          // Add date total
+          summaryRows.push([
+            "--- Date Total ---",
+            "",
+            dateStrengthTotal,
+            datePresentTotal,
+            dateAbsentTotal,
+          ]);
+          summaryRows.push(["", "", "", "", ""]);
         });
 
-        // Create worksheet from rows
-        const ws = XLSX.utils.aoa_to_sheet(rows);
-
-        // Set column widths
-        ws["!cols"] = [
-          { wch: 8 },
-          { wch: 12 },
+        const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
+        summaryWs["!cols"] = [
           { wch: 20 },
-          { wch: 12 },
-          { wch: 20 },
-          { wch: 12 },
-          { wch: 12 },
+          { wch: 25 },
+          { wch: 15 },
+          { wch: 15 },
+          { wch: 15 },
         ];
+        // Add autofilter to the data rows (starting from header)
+        summaryWs["!autofilter"] = {
+          ref: `A${headerRowIndex + 1}:E${summaryRows.length}`,
+        };
+        XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary");
 
-        // Enable auto-filter on first class header row (row 4: S No, Roll No, Name, etc.)
-        ws["!autofilter"] = { ref: "A4:G999" };
+        // Create detail sheets by date
+        allDatesSorted.forEach((dateKey) => {
+          const deptsOnDate = reportByDate[dateKey];
+          let dateDisplay = dateKey;
+          if (dateKey !== "Unknown") {
+            try {
+              const date = new Date(dateKey + "T00:00:00Z");
+              const day = String(date.getUTCDate()).padStart(2, "0");
+              const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+              const year = date.getUTCFullYear();
+              dateDisplay = `${day}-${month}-${year}`;
+            } catch (e) {
+              dateDisplay = dateKey;
+            }
+          }
 
-        // Use sanitized department name for sheet name (Excel has limitations)
-        const sheetName = deptName
-          .substring(0, 31)
-          .replace(/[\/\\?*\[\]]/g, "");
-        worksheets[sheetName] = ws;
-      });
+          const rows = [];
+          rows.push([`Date: ${dateDisplay}`, "", "", "", "", "", ""]);
+          rows.push(["", "", "", "", "", "", ""]);
 
-      // Add all worksheets to workbook (after summary)
-      Object.entries(worksheets).forEach(([sheetName, ws]) => {
-        XLSX.utils.book_append_sheet(workbook, ws, sheetName);
-      });
+          Object.entries(deptsOnDate).forEach(([deptName, classesOnDate]) => {
+            rows.push([String(deptName || "").trim(), "", "", "", "", "", ""]);
 
-      // Write file
+            Object.entries(classesOnDate).forEach(([className, absences]) => {
+              rows.push([
+                `Class: ${String(className || "").trim()}`,
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+              ]);
+              rows.push([
+                "S No",
+                "Roll No",
+                "Name",
+                "Residence",
+                "Reason",
+                "Status",
+                "Absence Count",
+              ]);
+
+              if (Array.isArray(absences) && absences.length > 0) {
+                absences.forEach((student, idx) => {
+                  let status = "Not Informed";
+                  if (typeof student.informed === "string") {
+                    status =
+                      student.informed.toLowerCase() === "informed"
+                        ? "Informed"
+                        : "Not Informed";
+                  } else if (student.informed === true) {
+                    status = "Informed";
+                  }
+
+                  rows.push([
+                    idx + 1,
+                    String(student.rollNo || "").trim(),
+                    String(student.name || "")
+                      .trim()
+                      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ""),
+                    String(student.residence || "")
+                      .trim()
+                      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ""),
+                    String(student.reason || "")
+                      .trim()
+                      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ""),
+                    status,
+                    student.absenceCount || 0,
+                  ]);
+                });
+              } else {
+                rows.push(["", "", "No absences", "", "", "", ""]);
+              }
+              rows.push(["", "", "", "", "", "", ""]);
+            });
+            rows.push(["", "", "", "", "", "", ""]);
+          });
+
+          const ws = XLSX.utils.aoa_to_sheet(rows);
+          ws["!cols"] = [
+            { wch: 8 },
+            { wch: 12 },
+            { wch: 20 },
+            { wch: 12 },
+            { wch: 20 },
+            { wch: 12 },
+            { wch: 15 },
+          ];
+
+          for (let i = 0; i < rows.length; i++) {
+            const sNoCell = `A${i + 1}`;
+            if (
+              ws[sNoCell] &&
+              typeof rows[i][0] === "number" &&
+              rows[i][0] > 0
+            ) {
+              ws[sNoCell].t = "n";
+            }
+            const absenceCell = `G${i + 1}`;
+            if (ws[absenceCell] && typeof rows[i][6] === "number") {
+              ws[absenceCell].t = "n";
+            }
+          }
+
+          const sheetName = dateDisplay
+            .replace(/[\/\\?*\[\]]/g, "")
+            .substring(0, 31);
+          XLSX.utils.book_append_sheet(workbook, ws, sheetName);
+        });
+      } else {
+        // For specific date - Build summary first, then data
+        const classStudentCountMap = {};
+        Object.entries(report).forEach(([deptName, absencesByClass]) => {
+          if (absencesByClass && absencesByClass.__totalStudents) {
+            classStudentCountMap[deptName] = absencesByClass.__totalStudents;
+          }
+        });
+
+        // Create summary sheet
+        const summaryRows = [["Absence Report Summary"]];
+        summaryRows.push(["Report Date", dateStr]);
+        summaryRows.push(["Generated on", new Date().toLocaleString()]);
+        summaryRows.push(["", "", "", "", ""]);
+        summaryRows.push([
+          "Department",
+          "Class",
+          "Total Strength",
+          "Present",
+          "Absent",
+        ]);
+        const summaryHeaderIndex = summaryRows.length;
+
+        let institutionStrengthTotal = 0;
+        let institutionPresentTotal = 0;
+        let institutionAbsentTotal = 0;
+
+        Object.entries(report).forEach(([deptName, absencesByClass]) => {
+          let deptStrengthTotal = 0;
+          let deptPresentTotal = 0;
+          let deptAbsentTotal = 0;
+          const classesArray = [];
+
+          Object.entries(absencesByClass).forEach(([className, absences]) => {
+            if (className === "__totalStudents" || !Array.isArray(absences))
+              return;
+
+            const allClassHolidays =
+              absences.length > 0 && absences.every((s) => s.isHoliday);
+            const totalStudents =
+              (classStudentCountMap[deptName] &&
+                classStudentCountMap[deptName][className]) ||
+              0;
+            const absentCount = allClassHolidays
+              ? 0
+              : absences.filter((s) => !s.isHoliday).length;
+            const presentCount = totalStudents - absentCount;
+            const displayStrength = allClassHolidays
+              ? "Holiday"
+              : totalStudents;
+            const displayPresent = allClassHolidays ? "-" : presentCount;
+            const displayAbsent = allClassHolidays ? "-" : absentCount;
+
+            classesArray.push([
+              String(deptName || "").trim(),
+              String(className || "").trim(),
+              displayStrength,
+              displayPresent,
+              displayAbsent,
+            ]);
+
+            if (!allClassHolidays) {
+              deptStrengthTotal += totalStudents;
+              deptPresentTotal += presentCount;
+              deptAbsentTotal += absentCount;
+              institutionStrengthTotal += totalStudents;
+              institutionPresentTotal += presentCount;
+              institutionAbsentTotal += absentCount;
+            }
+          });
+
+          // Add all classes for this department
+          classesArray.forEach((row) => {
+            summaryRows.push(row);
+          });
+
+          // Add department total row
+          summaryRows.push([
+            String(deptName || "").trim(),
+            "--- Department Total ---",
+            deptStrengthTotal,
+            deptPresentTotal,
+            deptAbsentTotal,
+          ]);
+        });
+
+        // Add institution total
+        summaryRows.push([
+          "--- Institution Total ---",
+          "",
+          institutionStrengthTotal,
+          institutionPresentTotal,
+          institutionAbsentTotal,
+        ]);
+
+        const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
+        summaryWs["!cols"] = [
+          { wch: 20 },
+          { wch: 25 },
+          { wch: 15 },
+          { wch: 15 },
+          { wch: 15 },
+        ];
+        // Add autofilter to the data rows
+        summaryWs["!autofilter"] = {
+          ref: `A${summaryHeaderIndex}:E${summaryRows.length}`,
+        };
+        XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary");
+
+        // Create department detail sheets
+        Object.entries(report).forEach(([deptName, absencesByClass]) => {
+          const rows = [];
+          rows.push([String(deptName || "").trim(), "", "", "", "", "", ""]);
+          rows.push(["", "", "", "", "", "", ""]);
+
+          Object.entries(absencesByClass).forEach(([className, absences]) => {
+            if (className === "__totalStudents") return;
+
+            rows.push([
+              `Class: ${String(className || "").trim()}`,
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+            ]);
+            rows.push([
+              "S No",
+              "Roll No",
+              "Name",
+              "Residence",
+              "Reason",
+              "Status",
+              "Absence Count",
+            ]);
+
+            if (Array.isArray(absences) && absences.length > 0) {
+              absences.forEach((student, idx) => {
+                let status = "Not Informed";
+                if (typeof student.informed === "string") {
+                  status =
+                    student.informed.toLowerCase() === "informed"
+                      ? "Informed"
+                      : "Not Informed";
+                } else if (student.informed === true) {
+                  status = "Informed";
+                }
+
+                rows.push([
+                  idx + 1,
+                  String(student.rollNo || "").trim(),
+                  String(student.name || "")
+                    .trim()
+                    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ""),
+                  String(student.residence || "")
+                    .trim()
+                    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ""),
+                  String(student.reason || "")
+                    .trim()
+                    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ""),
+                  status,
+                  student.absenceCount || 0,
+                ]);
+              });
+            } else {
+              rows.push(["", "", "No absences", "", "", "", ""]);
+            }
+            rows.push(["", "", "", "", "", "", ""]);
+          });
+
+          const ws = XLSX.utils.aoa_to_sheet(rows);
+          ws["!cols"] = [
+            { wch: 8 },
+            { wch: 12 },
+            { wch: 20 },
+            { wch: 12 },
+            { wch: 20 },
+            { wch: 12 },
+            { wch: 15 },
+          ];
+
+          for (let i = 0; i < rows.length; i++) {
+            const sNoCell = `A${i + 1}`;
+            if (
+              ws[sNoCell] &&
+              typeof rows[i][0] === "number" &&
+              rows[i][0] > 0
+            ) {
+              ws[sNoCell].t = "n";
+            }
+            const absenceCell = `G${i + 1}`;
+            if (ws[absenceCell] && typeof rows[i][6] === "number") {
+              ws[absenceCell].t = "n";
+            }
+          }
+
+          const sheetName = deptName
+            .substring(0, 31)
+            .replace(/[\/\\?*\[\]]/g, "");
+          XLSX.utils.book_append_sheet(workbook, ws, sheetName);
+        });
+      }
+
+      // Write file with proper options
       XLSX.writeFile(
         workbook,
         `Attendance-Report-${dateStr}-${new Date().getTime()}.xlsx`,
+        { compression: "deflate" },
       );
     } catch (error) {
       console.error("Export error:", error);
@@ -2723,6 +3263,7 @@ export default function AdminDashboard({ user, onLogout }) {
         alert(
           `Attendance locked successfully for ${data.lockedCount} class(es)!`,
         );
+        setIsCurrentDateLocked(true);
         setLockDate(new Date().toISOString().split("T")[0]);
         fetchLockedDates();
       } else {
@@ -2780,6 +3321,7 @@ export default function AdminDashboard({ user, onLogout }) {
         alert(
           `Attendance unlocked successfully for ${data.lockedCount} class(es)!`,
         );
+        setIsCurrentDateLocked(false);
         fetchLockedDates();
       } else {
         alert("Error: " + data.message);
@@ -2897,6 +3439,7 @@ export default function AdminDashboard({ user, onLogout }) {
         alert(
           `Holiday locked successfully for ${data.affectedClasses} class(es)!`,
         );
+        setIsCurrentHolidayDateLocked(true);
         setHolidayLockReason("");
         // Wait a moment for database to sync, then fetch
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -2975,6 +3518,7 @@ export default function AdminDashboard({ user, onLogout }) {
         alert(
           `Holiday unlocked successfully for ${data.affectedClasses} class(es)!`,
         );
+        setIsCurrentHolidayDateLocked(false);
         fetchHolidayLockedDates();
       } else {
         alert("Error: " + data.message);
@@ -3326,6 +3870,9 @@ export default function AdminDashboard({ user, onLogout }) {
         const breakdownMap = {}; // Map to track students per parent entity
         const breakdownPresentMap = {}; // Map to track present count per parent entity
         const globalHolidayDates = new Set(); // Track all holiday dates
+        let classesOnHolidayCount = 0; // Track how many classes are on holiday for the date
+        let hasAttendanceData = false; // Track if any attendance data exists
+        let holidayReasonForDate = null; // Track the reason for holiday lock
 
         for (const classItem of classesToFetch) {
           // Fetch students
@@ -3350,6 +3897,13 @@ export default function AdminDashboard({ user, onLogout }) {
                 if (lockDateStr >= startDateStr && lockDateStr <= endDateStr) {
                   classHolidayDates.add(lockDateStr);
                 }
+                // Capture the reason if this is the current specific date we're checking
+                if (
+                  dashboardDateMode === "specific" &&
+                  lockDateStr === dashboardDate
+                ) {
+                  holidayReasonForDate = lock.reason || "Lock";
+                }
               });
             }
           } catch (error) {
@@ -3368,6 +3922,11 @@ export default function AdminDashboard({ user, onLogout }) {
           const attendanceRecords = dataAttendance.success
             ? dataAttendance.attendanceRecords
             : [];
+
+          // Track if any attendance data exists
+          if (attendanceRecords.length > 0) {
+            hasAttendanceData = true;
+          }
 
           // Determine parent entity key for breakdown based on dashboardType and selection
           let parentKey;
@@ -3400,6 +3959,11 @@ export default function AdminDashboard({ user, onLogout }) {
 
           if (dashboardDateMode === "specific") {
             // For specific date:
+            // Count if this class is on holiday
+            if (classHolidayDates.has(dashboardDate)) {
+              classesOnHolidayCount++;
+            }
+
             // Total Students = students from classes operating on this date (NOT on holiday)
             // Present/Absent = only those with attendance records
             // Attendance % = Present / (Total - Holiday Students) * 100
@@ -3416,9 +3980,16 @@ export default function AdminDashboard({ user, onLogout }) {
             const studentsWithRecords = new Set();
             attendanceRecords.forEach((record) => {
               studentsWithRecords.add(record.studentId);
-              if (record.status === "absent") {
+              if (
+                statusMatchesSessionFilter(
+                  record.status,
+                  dashboardSessionFilter,
+                )
+              ) {
                 totalAbsent++;
-              } else if (record.status === "present") {
+              } else if (
+                statusIsPresent(record.status, dashboardSessionFilter)
+              ) {
                 totalPresent++;
                 // Track present students for breakdown
                 breakdownPresentMap[parentKey].add(record.studentId);
@@ -3445,9 +4016,16 @@ export default function AdminDashboard({ user, onLogout }) {
                 distinctDaysSet.add(dateKey);
               }
 
-              if (record.status === "absent") {
+              if (
+                statusMatchesSessionFilter(
+                  record.status,
+                  dashboardSessionFilter,
+                )
+              ) {
                 globalDailyStats[dateKey].absent++;
-              } else if (record.status === "present") {
+              } else if (
+                statusIsPresent(record.status, dashboardSessionFilter)
+              ) {
                 globalDailyStats[dateKey].present++;
                 // Track present students for breakdown
                 breakdownPresentMap[parentKey].add(record.studentId);
@@ -3547,7 +4125,33 @@ export default function AdminDashboard({ user, onLogout }) {
           avgAttendancePercent: avgAttendancePercent,
         };
 
+        // Determine if we should show "No attendance data available"
+        let noDataReason = null;
+        if (dashboardDateMode === "specific") {
+          // Check if it's a Sunday
+          if (sundayDates.has(dashboardDate)) {
+            noDataReason = "sunday";
+          }
+          // Check if ALL classes are on holiday (totalStudents.size === 0 means no classes are operating)
+          else if (
+            classesOnHolidayCount === classesToFetch.length &&
+            totalStudents.size === 0
+          ) {
+            noDataReason = holidayReasonForDate || "Lock";
+          }
+          // Check if there's no attendance data for this date
+          else if (!hasAttendanceData) {
+            noDataReason = "no_attendance";
+          }
+        } else {
+          // For date range, check if there's no attendance data at all
+          if (!hasAttendanceData) {
+            noDataReason = "no_attendance";
+          }
+        }
+
         setDashboardStats(newStats);
+        setDashboardNoDataReason(noDataReason);
         setDashboardBreakdownData(breakdownData);
         setDashboardHolidayData(pieChartData);
       } catch (error) {
@@ -3565,6 +4169,7 @@ export default function AdminDashboard({ user, onLogout }) {
     dashboardProgram,
     dashboardDepartment,
     dashboardClass,
+    dashboardSessionFilter,
     classes,
     departments,
   ]);
@@ -3723,6 +4328,36 @@ export default function AdminDashboard({ user, onLogout }) {
                   }}
                 />
               )}
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginLeft: "30px",
+                }}
+              >
+                <label style={{ fontWeight: "500", minWidth: "60px" }}>
+                  Session:
+                </label>
+                <select
+                  value={dashboardSessionFilter}
+                  onChange={(e) => setDashboardSessionFilter(e.target.value)}
+                  style={{
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #ddd",
+                    minWidth: "180px",
+                  }}
+                >
+                  <option value="both">Full Day Absence</option>
+                  <option value="morning">Morning Session (Hours 1-4)</option>
+                  <option value="afternoon">
+                    Afternoon Session (Hours 5-7)
+                  </option>
+                  <option value="all">Absence</option>
+                </select>
+              </div>
             </div>
 
             {/* Hierarchy Selection */}
@@ -3879,7 +4514,31 @@ export default function AdminDashboard({ user, onLogout }) {
             </div>
 
             <div className="dashboard-stats">
-              {dashboardDateMode === "specific" ? (
+              {dashboardNoDataReason ? (
+                <div
+                  style={{
+                    gridColumn: "1 / -1",
+                    padding: "20px",
+                    textAlign: "center",
+                    backgroundColor: "#f5f5f5",
+                    borderRadius: "8px",
+                    border: "1px solid #ddd",
+                    fontSize: "16px",
+                    color: "#666",
+                  }}
+                >
+                  <p style={{ margin: 0, fontWeight: "500" }}>
+                    No attendance data available
+                    {dashboardNoDataReason === "sunday" && (
+                      <span> (Holiday-Sunday)</span>
+                    )}
+                    {dashboardNoDataReason !== "sunday" &&
+                      dashboardNoDataReason !== "no_attendance" && (
+                        <span> (Holiday-{dashboardNoDataReason})</span>
+                      )}
+                  </p>
+                </div>
+              ) : dashboardDateMode === "specific" ? (
                 <>
                   <div className="stat-card">
                     <h3>Total Student</h3>
@@ -3944,26 +4603,28 @@ export default function AdminDashboard({ user, onLogout }) {
             </div>
 
             {/* Charts Section */}
-            <div
-              style={{
-                display: "flex",
-                gap: "30px",
-                marginTop: "30px",
-                justifyContent: "space-between",
-              }}
-            >
-              <DashboardBarChart
-                breakdownData={dashboardBreakdownData}
-                cardTotalStudents={dashboardStats.totalStudents}
-              />
-              <DashboardPieChart
-                presentDays={dashboardHolidayData.presentDays}
-                absentDays={dashboardHolidayData.absentDays}
-                holidayDays={dashboardHolidayData.holidayDays}
-                totalStudents={dashboardStats.totalStudents}
-                showTotalStudents={dashboardDateMode === "range"}
-              />
-            </div>
+            {!dashboardNoDataReason && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "30px",
+                  marginTop: "30px",
+                  justifyContent: "space-between",
+                }}
+              >
+                <DashboardBarChart
+                  breakdownData={dashboardBreakdownData}
+                  cardTotalStudents={dashboardStats.totalStudents}
+                />
+                <DashboardPieChart
+                  presentDays={dashboardHolidayData.presentDays}
+                  absentDays={dashboardHolidayData.absentDays}
+                  holidayDays={dashboardHolidayData.holidayDays}
+                  totalStudents={dashboardStats.totalStudents}
+                  showTotalStudents={dashboardDateMode === "range"}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -4416,22 +5077,47 @@ export default function AdminDashboard({ user, onLogout }) {
                   </div>
                   <div className="form-group">
                     <label>Password</label>
-                    <input
-                      type="password"
-                      value={newTeacher.password}
-                      onChange={(e) =>
-                        setNewTeacher({
-                          ...newTeacher,
-                          password: e.target.value,
-                        })
-                      }
-                      placeholder="Enter password"
-                    />
+                    <div className="password-input-wrapper">
+                      <input
+                        type={showNewTeacherPassword ? "text" : "password"}
+                        value={newTeacher.password}
+                        onChange={(e) =>
+                          setNewTeacher({
+                            ...newTeacher,
+                            password: e.target.value,
+                          })
+                        }
+                        placeholder="Enter password"
+                      />
+                      <button
+                        type="button"
+                        className="eye-icon-btn"
+                        onClick={() =>
+                          setShowNewTeacherPassword(!showNewTeacherPassword)
+                        }
+                        title={
+                          showNewTeacherPassword
+                            ? "Hide password"
+                            : "Show password"
+                        }
+                      >
+                        {showNewTeacherPassword ? "👁️" : "👁️‍🗨️"}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <button onClick={addTeacher} className="add-btn">
                   Add Teacher
                 </button>
+
+                {/* Excel Upload Section for Teachers */}
+                <ExcelUploadSection
+                  title="Add Teachers from Excel"
+                  onDownloadTemplate={handleDownloadTeacherTemplate}
+                  onValidateFile={handleValidateTeacherExcel}
+                  onProcessData={handleProcessTeacherData}
+                  templateFileName="teachers"
+                />
               </div>
             )}
 

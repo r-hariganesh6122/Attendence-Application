@@ -81,9 +81,16 @@ model Attendance {
   date          DateTime
   studentId     Int
   classId       Int
-  status        String
+  status        String   // "present", "morningAbsent", "afternoonAbsent", "bothAbsent"
   absenceReason String?
   informed      Boolean?
+  hour1Absent   Boolean  @default(false)
+  hour2Absent   Boolean  @default(false)
+  hour3Absent   Boolean  @default(false)
+  hour4Absent   Boolean  @default(false)
+  hour5Absent   Boolean  @default(false)
+  hour6Absent   Boolean  @default(false)
+  hour7Absent   Boolean  @default(false)
 
   student Student @relation(fields: [studentId], references: [id])
   class   Class   @relation(fields: [classId], references: [id])

@@ -1,6 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
 import { apiCall } from "@/lib/apiUtils";
+import {
+  calculateSessionStatus,
+  getAbsentHours,
+} from "@/lib/utils/sessionUtils";
 
 import "../attendance.css";
 
@@ -10,6 +14,7 @@ function TeacherDashboard({ user, onLogout }) {
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split("T")[0],
   );
+  const [selectedHour, setSelectedHour] = useState(1);
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [currentDepartment, setCurrentDepartment] = useState(null);
@@ -107,7 +112,13 @@ function TeacherDashboard({ user, onLogout }) {
           (r) => r.studentId === student.id,
         );
         initial[student.id] = {
-          absent: record ? record.status === "absent" : false,
+          hour1Absent: record?.hour1Absent || false,
+          hour2Absent: record?.hour2Absent || false,
+          hour3Absent: record?.hour3Absent || false,
+          hour4Absent: record?.hour4Absent || false,
+          hour5Absent: record?.hour5Absent || false,
+          hour6Absent: record?.hour6Absent || false,
+          hour7Absent: record?.hour7Absent || false,
           reason: record ? record.absenceReason || "" : "",
           informed: record ? !!record.informed : false,
         };
@@ -207,7 +218,17 @@ function TeacherDashboard({ user, onLogout }) {
     // Reset attendance when date changes
     const initial = {};
     students.forEach((student) => {
-      initial[student.id] = { absent: false, reason: "", informed: false };
+      initial[student.id] = {
+        hour1Absent: false,
+        hour2Absent: false,
+        hour3Absent: false,
+        hour4Absent: false,
+        hour5Absent: false,
+        hour6Absent: false,
+        hour7Absent: false,
+        reason: "",
+        informed: false,
+      };
     });
     setAttendance(initial);
   };
@@ -224,15 +245,18 @@ function TeacherDashboard({ user, onLogout }) {
       alert(reason);
       return;
     }
+
+    const hourFieldName = `hour${selectedHour}Absent`;
     setAttendance((prev) => {
-      const newAbsent = !prev[studentId].absent;
+      const currentValue = prev[studentId][hourFieldName];
+      const newValue = !currentValue;
       return {
         ...prev,
         [studentId]: {
           ...prev[studentId],
-          absent: newAbsent,
-          reason: newAbsent ? prev[studentId].reason : "",
-          informed: newAbsent ? prev[studentId].informed : false,
+          [hourFieldName]: newValue,
+          reason: newValue ? prev[studentId].reason : "",
+          informed: newValue ? prev[studentId].informed : false,
         },
       };
     });
@@ -258,6 +282,7 @@ function TeacherDashboard({ user, onLogout }) {
       return;
     }
 
+    const hourFieldName = `hour${selectedHour}Absent`;
     const newInformed = !attendance[studentId]?.informed;
 
     // If marking as informed, check if reason is provided
@@ -284,7 +309,16 @@ function TeacherDashboard({ user, onLogout }) {
     // Validate that all informed absences have a reason
     const missingReasons = students.filter((student) => {
       const record = attendance[student.id];
-      return record?.absent && record?.informed && !record?.reason?.trim();
+      // Check if any hour is absent AND informed is marked but no reason
+      const anyHourAbsent =
+        record.hour1Absent ||
+        record.hour2Absent ||
+        record.hour3Absent ||
+        record.hour4Absent ||
+        record.hour5Absent ||
+        record.hour6Absent ||
+        record.hour7Absent;
+      return anyHourAbsent && record?.informed && !record?.reason?.trim();
     });
 
     if (missingReasons.length > 0) {
@@ -297,12 +331,21 @@ function TeacherDashboard({ user, onLogout }) {
     const attendanceRecord = {
       classId: selectedDepartmentId,
       date: selectedDate,
-      records: students.map((student) => ({
-        studentId: student.id,
-        absent: attendance[student.id]?.absent || false,
-        informed: attendance[student.id]?.informed || false,
-        reason: attendance[student.id]?.reason || "",
-      })),
+      records: students.map((student) => {
+        const studentData = attendance[student.id];
+        return {
+          studentId: student.id,
+          hour1Absent: studentData.hour1Absent || false,
+          hour2Absent: studentData.hour2Absent || false,
+          hour3Absent: studentData.hour3Absent || false,
+          hour4Absent: studentData.hour4Absent || false,
+          hour5Absent: studentData.hour5Absent || false,
+          hour6Absent: studentData.hour6Absent || false,
+          hour7Absent: studentData.hour7Absent || false,
+          informed: studentData.informed || false,
+          reason: studentData.reason || "",
+        };
+      }),
     };
 
     apiCall("/api/attendance", {
@@ -383,6 +426,30 @@ function TeacherDashboard({ user, onLogout }) {
                 id="date-select"
               />
             </div>
+            <div className="selector-group">
+              <label htmlFor="hour-select" className="class-label">
+                Select Hour:
+              </label>
+              <select
+                id="hour-select"
+                value={selectedHour}
+                onChange={(e) => setSelectedHour(parseInt(e.target.value))}
+                className="class-select"
+                style={{
+                  width: "100%",
+                  maxWidth: "150px",
+                  padding: "8px",
+                  borderRadius: "4px",
+                  border: "1px solid #ddd",
+                }}
+              >
+                {[1, 2, 3, 4, 5, 6, 7].map((hour) => (
+                  <option key={hour} value={hour}>
+                    Hour {hour}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -444,7 +511,10 @@ function TeacherDashboard({ user, onLogout }) {
                 <td className="checkbox-cell">
                   <input
                     type="checkbox"
-                    checked={attendance[student.id]?.absent || false}
+                    checked={
+                      attendance[student.id]?.[`hour${selectedHour}Absent`] ||
+                      false
+                    }
                     onChange={() => handleAbsentChange(student.id)}
                     className="checkbox-input"
                     disabled={!isAttendanceEditable()}
@@ -462,12 +532,14 @@ function TeacherDashboard({ user, onLogout }) {
                     onChange={() => handleInformedChange(student.id)}
                     className="checkbox-input"
                     disabled={
-                      !attendance[student.id]?.absent || !isAttendanceEditable()
+                      !attendance[student.id]?.[`hour${selectedHour}Absent`] ||
+                      !isAttendanceEditable()
                     }
                     style={{
                       cursor:
-                        !attendance[student.id]?.absent ||
-                        !isAttendanceEditable()
+                        !attendance[student.id]?.[
+                          `hour${selectedHour}Absent`
+                        ] || !isAttendanceEditable()
                           ? "not-allowed"
                           : "pointer",
                     }}
@@ -482,14 +554,16 @@ function TeacherDashboard({ user, onLogout }) {
                       handleReasonChange(student.id, e.target.value)
                     }
                     disabled={
-                      !attendance[student.id]?.absent || !isAttendanceEditable()
+                      !attendance[student.id]?.[`hour${selectedHour}Absent`] ||
+                      !isAttendanceEditable()
                     }
                     maxLength="40"
                     className="reason-input"
                     style={{
                       cursor:
-                        !attendance[student.id]?.absent ||
-                        !isAttendanceEditable()
+                        !attendance[student.id]?.[
+                          `hour${selectedHour}Absent`
+                        ] || !isAttendanceEditable()
                           ? "not-allowed"
                           : "text",
                     }}

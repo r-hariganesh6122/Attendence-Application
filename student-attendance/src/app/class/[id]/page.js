@@ -6,6 +6,14 @@ import { apiCall } from "@/lib/apiUtils";
 import "../../attendance.css";
 import ClassAttendanceBarChart from "../../components/ClassAttendanceBarChart";
 import ClassAttendancePieChart from "../../components/ClassAttendancePieChart";
+import { ExcelUploadSection } from "../../components/ExcelUploadSection";
+import {
+  generateStudentTemplate,
+  validateStudentExcel,
+  downloadTemplate,
+  generateClassTeacherTemplate,
+  validateClassTeacherExcel,
+} from "@/lib/excelUtils";
 
 // Helper function to sort array by search match position
 function sortByMatchPosition(items, searchQuery, fieldNames = []) {
@@ -108,6 +116,13 @@ export default function ClassDetailsPage({ params }) {
 
   useEffect(() => {
     async function fetchClassData() {
+      // Fetch class info
+      const resClass = await apiCall("/api/classes");
+      const dataClass = await resClass.json();
+      if (dataClass.success && dataClass.classes) {
+        const foundClass = dataClass.classes.find((c) => c.id === parseInt(id));
+        setClassInfo(foundClass || null);
+      }
       // Fetch students
       const resStudents = await apiCall(`/api/students?classId=${id}`);
       const dataStudents = await resStudents.json();
@@ -758,6 +773,115 @@ export default function ClassDetailsPage({ params }) {
     fetchStudentAttendance(student.id);
   };
 
+  // EXCEL HANDLERS FOR STUDENTS
+  const handleValidateStudentExcel = async (file) => {
+    return validateStudentExcel(file, students);
+  };
+
+  const handleProcessStudentData = async (validData) => {
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const studentData of validData) {
+      try {
+        const res = await apiCall("/api/students", {
+          method: "POST",
+          body: JSON.stringify({
+            ...studentData,
+            classId: parseInt(id),
+          }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          successCount++;
+        } else {
+          errorCount++;
+          console.error(
+            `Failed to add student: ${studentData.studentName} - ${data.message}`,
+          );
+        }
+      } catch (error) {
+        errorCount++;
+        console.error(
+          `Error adding student: ${studentData.studentName} - ${error.message}`,
+        );
+      }
+    }
+
+    alert(
+      `Students imported: ${successCount} succeeded${
+        errorCount > 0 ? `, ${errorCount} failed` : ""
+      }`,
+    );
+
+    // Refresh student list
+    fetchStudents();
+  };
+
+  const handleDownloadStudentTemplate = () => {
+    const workbook = generateStudentTemplate();
+    downloadTemplate(workbook, "students");
+  };
+
+  // EXCEL HANDLERS FOR CLASS TEACHERS
+  const handleValidateClassTeacherExcel = async (file) => {
+    return validateClassTeacherExcel(file, courses, allTeachers);
+  };
+
+  const handleProcessClassTeacherData = async (validData) => {
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const assignmentData of validData) {
+      try {
+        // If teacher is assigned (mobile provided)
+        if (assignmentData.teacherId) {
+          const res = await apiCall("/api/class-teachers", {
+            method: "POST",
+            body: JSON.stringify({
+              classId: parseInt(id),
+              teacherId: assignmentData.teacherId,
+              courseId: assignmentData.courseId || null,
+            }),
+          });
+          const data = await res.json();
+
+          if (data.success) {
+            successCount++;
+          } else {
+            errorCount++;
+            console.error(
+              `Failed to assign teacher: ${assignmentData.teacherName || "N/A"} - ${data.message}`,
+            );
+          }
+        } else {
+          // Course without teacher assignment still counts as success
+          successCount++;
+        }
+      } catch (error) {
+        errorCount++;
+        console.error(
+          `Error assigning teacher: ${assignmentData.teacherName || "N/A"} - ${error.message}`,
+        );
+      }
+    }
+
+    alert(
+      `Courses processed: ${successCount} succeeded${
+        errorCount > 0 ? `, ${errorCount} failed` : ""
+      }`,
+    );
+
+    // Refresh class teachers list
+    fetchClassTeachers();
+  };
+
+  const handleDownloadClassTeacherTemplate = () => {
+    const workbook = generateClassTeacherTemplate();
+    downloadTemplate(workbook, "class_teachers");
+  };
+
   return (
     <div className="attendance-container">
       <div className="attendance-card">
@@ -765,7 +889,7 @@ export default function ClassDetailsPage({ params }) {
           <div>
             <h1>Class Details</h1>
             <p className="teacher-name">
-              {classInfo ? classInfo.name : `Class ID: ${id}`}
+              {classInfo ? `CLASS NAME : ${classInfo.name}` : `Class ID: ${id}`}
             </p>
           </div>
           <button onClick={() => router.push("/")} className="back-btn">
@@ -1010,6 +1134,15 @@ export default function ClassDetailsPage({ params }) {
                   <button onClick={addStudent} className="add-btn">
                     Add Student
                   </button>
+
+                  {/* Excel Upload Section for Students */}
+                  <ExcelUploadSection
+                    title="Add Students from Excel"
+                    onDownloadTemplate={handleDownloadStudentTemplate}
+                    onValidateFile={handleValidateStudentExcel}
+                    onProcessData={handleProcessStudentData}
+                    templateFileName="students"
+                  />
                 </div>
               )}
 
@@ -1914,6 +2047,15 @@ export default function ClassDetailsPage({ params }) {
                       </button>
                     )}
                   </div>
+
+                  {/* Excel Upload Section for Teacher Assignments */}
+                  <ExcelUploadSection
+                    title="Assign Teachers from Excel"
+                    onDownloadTemplate={handleDownloadClassTeacherTemplate}
+                    onValidateFile={handleValidateClassTeacherExcel}
+                    onProcessData={handleProcessClassTeacherData}
+                    templateFileName="class_teachers"
+                  />
                 </div>
               )}
 

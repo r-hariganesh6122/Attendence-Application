@@ -71,6 +71,13 @@ CREATE TABLE `Attendance` (
     `status` VARCHAR(191) NOT NULL,
     `absenceReason` VARCHAR(191) NULL,
     `informed` BOOLEAN NULL,
+    `hour1Absent` BOOLEAN NOT NULL DEFAULT false,
+    `hour2Absent` BOOLEAN NOT NULL DEFAULT false,
+    `hour3Absent` BOOLEAN NOT NULL DEFAULT false,
+    `hour4Absent` BOOLEAN NOT NULL DEFAULT false,
+    `hour5Absent` BOOLEAN NOT NULL DEFAULT false,
+    `hour6Absent` BOOLEAN NOT NULL DEFAULT false,
+    `hour7Absent` BOOLEAN NOT NULL DEFAULT false,
 
     UNIQUE INDEX `Attendance_studentId_date_key`(`studentId`, `date`),
     PRIMARY KEY (`id`)

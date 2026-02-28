@@ -7,22 +7,44 @@ export const attendanceCreateSchema = z.object({
   }),
   studentId: z.number().positive("studentId must be a positive number"),
   classId: z.number().positive("classId must be a positive number"),
-  status: z.enum(["present", "absent", "late"], {
-    errorMap: () => ({
-      message: 'status must be "present", "absent", or "late"',
-    }),
-  }),
+  status: z.enum(
+    ["present", "morningAbsent", "afternoonAbsent", "bothAbsent"],
+    {
+      errorMap: () => ({
+        message:
+          'status must be "present", "morningAbsent", "afternoonAbsent", or "bothAbsent"',
+      }),
+    },
+  ),
+  hour1Absent: z.boolean().optional().default(false),
+  hour2Absent: z.boolean().optional().default(false),
+  hour3Absent: z.boolean().optional().default(false),
+  hour4Absent: z.boolean().optional().default(false),
+  hour5Absent: z.boolean().optional().default(false),
+  hour6Absent: z.boolean().optional().default(false),
+  hour7Absent: z.boolean().optional().default(false),
   absenceReason: z.string().optional(),
   informed: z.boolean().optional(),
 });
 
 export const attendanceUpdateSchema = z.object({
   attendanceId: z.number().positive("attendanceId must be a positive number"),
-  status: z.enum(["present", "absent", "late"], {
-    errorMap: () => ({
-      message: 'status must be "present", "absent", or "late"',
-    }),
-  }),
+  status: z.enum(
+    ["present", "morningAbsent", "afternoonAbsent", "bothAbsent"],
+    {
+      errorMap: () => ({
+        message:
+          'status must be "present", "morningAbsent", "afternoonAbsent", or "bothAbsent"',
+      }),
+    },
+  ),
+  hour1Absent: z.boolean().optional().default(false),
+  hour2Absent: z.boolean().optional().default(false),
+  hour3Absent: z.boolean().optional().default(false),
+  hour4Absent: z.boolean().optional().default(false),
+  hour5Absent: z.boolean().optional().default(false),
+  hour6Absent: z.boolean().optional().default(false),
+  hour7Absent: z.boolean().optional().default(false),
   absenceReason: z.string().optional(),
   informed: z.boolean().optional(),
 });

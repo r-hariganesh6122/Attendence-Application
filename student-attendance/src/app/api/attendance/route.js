@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { authenticateRequest } from "@/lib/authMiddleware";
+import { calculateSessionStatus } from "@/lib/utils/sessionUtils";
 
 const prisma = new PrismaClient();
 
@@ -98,11 +99,39 @@ export async function POST(request) {
     // Normalize all record keys to correct Prisma field names (force only correct keys)
     const normalizedRecords = records.map((rec) => {
       let studentId = rec.studentId || rec.studentid || rec.studentld;
+
+      // Extract hour fields
+      const hour1Absent = rec.hour1Absent || false;
+      const hour2Absent = rec.hour2Absent || false;
+      const hour3Absent = rec.hour3Absent || false;
+      const hour4Absent = rec.hour4Absent || false;
+      const hour5Absent = rec.hour5Absent || false;
+      const hour6Absent = rec.hour6Absent || false;
+      const hour7Absent = rec.hour7Absent || false;
+
+      // Calculate status based on session absences
+      const status = calculateSessionStatus(
+        hour1Absent,
+        hour2Absent,
+        hour3Absent,
+        hour4Absent,
+        hour5Absent,
+        hour6Absent,
+        hour7Absent,
+      );
+
       return {
         classId: classId,
         studentId: studentId,
         date: new Date(date + "T00:00:00.000Z"),
-        status: rec.absent ? "absent" : "present",
+        status: status,
+        hour1Absent,
+        hour2Absent,
+        hour3Absent,
+        hour4Absent,
+        hour5Absent,
+        hour6Absent,
+        hour7Absent,
         absenceReason: rec.reason || rec.absenceReason || null,
         informed: !!rec.informed,
       };
@@ -130,6 +159,30 @@ export async function GET(request) {
     const studentId = searchParams.get("studentId");
     const from = searchParams.get("from");
     const to = searchParams.get("to");
+    const getMinDate = searchParams.get("getMinDate");
+
+    // If getMinDate is requested, return the earliest attendance date
+    if (getMinDate === "true") {
+      const minAttendance = await prisma.attendance.findFirst({
+        orderBy: { date: "asc" },
+        select: { date: true },
+      });
+
+      if (minAttendance) {
+        const minDate = minAttendance.date.toISOString().split("T")[0];
+        return NextResponse.json({
+          success: true,
+          minDate: minDate,
+        });
+      } else {
+        // If no attendance records exist, return today's date
+        const todayDate = new Date().toISOString().split("T")[0];
+        return NextResponse.json({
+          success: true,
+          minDate: todayDate,
+        });
+      }
+    }
 
     // If studentId is provided, fetch student's attendance
     if (studentId) {
@@ -167,6 +220,13 @@ export async function GET(request) {
           id: true,
           date: true,
           status: true,
+          hour1Absent: true,
+          hour2Absent: true,
+          hour3Absent: true,
+          hour4Absent: true,
+          hour5Absent: true,
+          hour6Absent: true,
+          hour7Absent: true,
           absenceReason: true,
           informed: true,
         },
@@ -229,6 +289,13 @@ export async function GET(request) {
           date: true,
           studentId: true,
           status: true,
+          hour1Absent: true,
+          hour2Absent: true,
+          hour3Absent: true,
+          hour4Absent: true,
+          hour5Absent: true,
+          hour6Absent: true,
+          hour7Absent: true,
           absenceReason: true,
           informed: true,
         },
@@ -241,6 +308,13 @@ export async function GET(request) {
           date: true,
           studentId: true,
           status: true,
+          hour1Absent: true,
+          hour2Absent: true,
+          hour3Absent: true,
+          hour4Absent: true,
+          hour5Absent: true,
+          hour6Absent: true,
+          hour7Absent: true,
           absenceReason: true,
           informed: true,
         },

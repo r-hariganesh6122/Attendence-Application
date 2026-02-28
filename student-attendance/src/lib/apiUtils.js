@@ -24,10 +24,14 @@ export async function apiCall(url, options = {}) {
   // Log errors for debugging
   if (!response.ok) {
     const errorText = await response.clone().text();
-    console.error(`API Error (${response.status}):`, url, errorText);
-    // Log token status
-    if (!token) {
-      console.error("Token is missing from localStorage");
+    // Only log server errors (5xx) to console
+    // 4xx errors are validation/client errors handled by the app
+    if (response.status >= 500) {
+      console.error(`API Error (${response.status}):`, url, errorText);
+    }
+    // Log token status only if token is missing
+    if (!token && response.status === 401) {
+      console.warn("Token is missing from localStorage for API call to:", url);
     }
   }
 

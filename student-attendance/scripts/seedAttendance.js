@@ -2,11 +2,49 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 function randomInformed() {
-  return Math.random() < 0.5;
+  return Math.random() < 0.6;
 }
 
-function randomStatus() {
-  return Math.random() < 0.8 ? "present" : "absent";
+// Generate random hour absences - realistic scenario
+// Most students are present, only ~15% have any absences
+function generateRandomHourAbsences() {
+  const hours = [false, false, false, false, false, false, false];
+
+  // 85% chance student is fully present
+  if (Math.random() < 0.85) {
+    return hours; // All present
+  }
+
+  // 15% chance of having 1-2 absent hours
+  const numAbsentHours = Math.floor(Math.random() * 2) + 1; // 1 or 2 hours absent
+
+  // Randomly select which hours are absent
+  const indices = new Set();
+  while (indices.size < numAbsentHours) {
+    indices.add(Math.floor(Math.random() * 7));
+  }
+
+  indices.forEach((i) => {
+    hours[i] = true;
+  });
+
+  return hours;
+}
+
+// Calculate session status from hourly absences
+function calculateSessionStatus(hours) {
+  const morningAbsent = hours[0] || hours[1] || hours[2] || hours[3]; // Hours 1-4
+  const afternoonAbsent = hours[4] || hours[5] || hours[6]; // Hours 5-7
+
+  if (morningAbsent && afternoonAbsent) {
+    return "bothAbsent";
+  } else if (morningAbsent) {
+    return "morningAbsent";
+  } else if (afternoonAbsent) {
+    return "afternoonAbsent";
+  } else {
+    return "present";
+  }
 }
 
 function randomReason() {
@@ -155,11 +193,16 @@ async function seedAttendance() {
       const classStudents = students.filter((s) => s.classId === classItem.id);
 
       for (const student of classStudents) {
-        let status = randomStatus();
+        // Generate random hourly absences
+        const hourAbsences = generateRandomHourAbsences();
+        const status = calculateSessionStatus(hourAbsences);
+
         let informed = null;
         let absenceReason = null;
 
-        if (status === "absent") {
+        // If any hour is absent, possibly add a reason and informed flag
+        const hasAnyAbsence = hourAbsences.some((h) => h === true);
+        if (hasAnyAbsence) {
           informed = randomInformed();
           absenceReason = randomReason();
           // Validation: if informed is true, absenceReason must not be null
@@ -183,13 +226,28 @@ async function seedAttendance() {
             studentId: student.id,
             classId: student.classId,
             status,
+            hour1Absent: hourAbsences[0],
+            hour2Absent: hourAbsences[1],
+            hour3Absent: hourAbsences[2],
+            hour4Absent: hourAbsences[3],
+            hour5Absent: hourAbsences[4],
+            hour6Absent: hourAbsences[5],
+            hour7Absent: hourAbsences[6],
             absenceReason,
             informed,
           },
         });
 
         console.log(
-          `Attendance for ${student.studentName} on ${currentDateString} (${status}${status === "absent" ? ", " + (informed ? "Informed" : "Not Informed") : ""})`,
+          `Attendance for ${student.studentName} on ${currentDateString} (${status}${
+            hasAnyAbsence
+              ? ", Hours: " +
+                hourAbsences
+                  .map((h, i) => (h ? i + 1 : null))
+                  .filter((h) => h !== null)
+                  .join(",")
+              : ""
+          })`,
         );
       }
     }
