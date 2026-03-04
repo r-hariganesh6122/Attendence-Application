@@ -87,6 +87,7 @@ export function createToken(user) {
       role: user.role,
       name: user.name,
       mobile: user.mobile,
+      coordinatorDepartmentId: user.coordinatorDepartmentId || null,
     },
     JWT_SECRET,
     { expiresIn: "24h" },
@@ -102,4 +103,52 @@ export function verifyToken(token) {
   } catch (error) {
     return null;
   }
+}
+
+/**
+ * Check if academic coordinator can access a department
+ * @param {Object} user - Decoded JWT user object
+ * @param {number} departmentId - Department ID to check access for
+ * @returns {boolean} - true if user is admin or coordinator for this department
+ */
+export function canAccessDepartment(user, departmentId) {
+  if (user.role === "admin") return true;
+  if (user.role === "academic_coordinator") {
+    return user.coordinatorDepartmentId === departmentId;
+  }
+  return false;
+}
+
+/**
+ * Middleware to verify academic coordinator access to a department
+ * Usage: withDepartmentAccess(handler, departmentId)
+ */
+export function withDepartmentAccess(departmentId) {
+  return (handler) => {
+    return async (request) => {
+      const user = await authenticateRequest(request);
+      if (!user) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Unauthorized - Invalid or missing token",
+          },
+          { status: 401 },
+        );
+      }
+
+      if (!canAccessDepartment(user, departmentId)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Forbidden - No access to this department",
+          },
+          { status: 403 },
+        );
+      }
+
+      request.user = user;
+      return handler(request);
+    };
+  };
 }

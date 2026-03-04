@@ -11,6 +11,10 @@ export default function LoginPage({ onLogin }) {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
+  const [showRoleSelection, setShowRoleSelection] = useState(false);
+  const [tempUserData, setTempUserData] = useState(null);
+  const [tempToken, setTempToken] = useState(null);
+  const [selectedRole, setSelectedRole] = useState("academic_coordinator");
 
   // Load saved credentials on component mount and auto-login if available
   useEffect(() => {
@@ -96,8 +100,16 @@ export default function LoginPage({ onLogin }) {
           // Remove the skipAutoLogin flag so auto-login works next time
           localStorage.removeItem("skipAutoLogin");
 
-          // Pass user data and token to onLogin
-          onLogin(data.user, data.token);
+          // If user is academic coordinator, show role selection
+          if (data.user.role === "academic_coordinator") {
+            setTempUserData(data.user);
+            setTempToken(data.token);
+            setSelectedRole("academic_coordinator");
+            setShowRoleSelection(true);
+          } else {
+            // Pass user data and token to onLogin
+            onLogin(data.user, data.token);
+          }
         } else {
           setError(data.message || "Invalid mobile or password");
         }
@@ -105,71 +117,139 @@ export default function LoginPage({ onLogin }) {
       .catch(() => setError("Server error. Please try again later."));
   };
 
+  const handleRoleSelection = () => {
+    if (tempUserData && tempToken) {
+      // Update user object with selected active role
+      const userData = {
+        ...tempUserData,
+        activeRole: selectedRole,
+      };
+      localStorage.setItem("activeRole", selectedRole);
+      onLogin(userData, tempToken);
+      setShowRoleSelection(false);
+      setTempUserData(null);
+      setTempToken(null);
+    }
+  };
+
   return (
     <div className="login-container">
       <div className="login-card">
-        <h1 className="login-title">Attendance Management System</h1>
-        <p className="login-subtitle">Enter your credentials to login</p>
+        {showRoleSelection ? (
+          <>
+            <h1 className="login-title">Select Your Role</h1>
+            <p className="login-subtitle">
+              Welcome, {tempUserData?.name}! Choose which role you want to use
+            </p>
 
-        <form onSubmit={handleSubmit} className="login-form">
-          <div className="form-group">
-            <label htmlFor="mobile" className="form-label">
-              Mobile Number
-            </label>
-            <input
-              type="tel"
-              id="mobile"
-              value={mobile}
-              onChange={(e) => setMobile(e.target.value)}
-              placeholder="Enter your mobile number"
-              className="form-input"
-              autoFocus
-            />
-          </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleRoleSelection();
+              }}
+              className="login-form"
+            >
+              <div className="form-group">
+                <label className="form-label">Role Selection</label>
+                <div className="role-options">
+                  <div className="role-option">
+                    <input
+                      type="radio"
+                      id="teacher-role"
+                      name="role"
+                      value="teacher"
+                      checked={selectedRole === "teacher"}
+                      onChange={(e) => setSelectedRole(e.target.value)}
+                    />
+                    <label htmlFor="teacher-role">Teacher</label>
+                  </div>
+                  <div className="role-option">
+                    <input
+                      type="radio"
+                      id="coordinator-role"
+                      name="role"
+                      value="academic_coordinator"
+                      checked={selectedRole === "academic_coordinator"}
+                      onChange={(e) => setSelectedRole(e.target.value)}
+                    />
+                    <label htmlFor="coordinator-role">
+                      Academic Coordinator
+                    </label>
+                  </div>
+                </div>
+              </div>
 
-          <div className="form-group">
-            <label htmlFor="password" className="form-label">
-              Password
-            </label>
-            <div className="password-input-wrapper">
-              <input
-                type={showPassword ? "text" : "password"}
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                className="form-input"
-              />
-              <button
-                type="button"
-                className="eye-icon-btn"
-                onClick={() => setShowPassword(!showPassword)}
-                title={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? "👁️" : "👁️‍🗨️"}
+              <button type="submit" className="login-btn">
+                Continue
               </button>
-            </div>
-          </div>
+            </form>
+          </>
+        ) : (
+          <>
+            <h1 className="login-title">Attendance Management System</h1>
+            <p className="login-subtitle">Enter your credentials to login</p>
 
-          <div className="form-group remember-me-group">
-            <label htmlFor="rememberMe" className="remember-me-label">
-              <input
-                type="checkbox"
-                id="rememberMe"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="remember-me-checkbox"
-              />
-              Remember me
-            </label>
-          </div>
+            <form onSubmit={handleSubmit} className="login-form">
+              <div className="form-group">
+                <label htmlFor="mobile" className="form-label">
+                  Mobile Number
+                </label>
+                <input
+                  type="tel"
+                  id="mobile"
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value)}
+                  placeholder="Enter your mobile number"
+                  className="form-input"
+                  autoFocus
+                />
+              </div>
 
-          {error && <span className="error-message">{error}</span>}
+              <div className="form-group">
+                <label htmlFor="password" className="form-label">
+                  Password
+                </label>
+                <div className="password-input-wrapper">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    id="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="form-input"
+                  />
+                  <button
+                    type="button"
+                    className="eye-icon-btn"
+                    onClick={() => setShowPassword(!showPassword)}
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? "👁️" : "👁️‍🗨️"}
+                  </button>
+                </div>
+              </div>
 
-          <button type="submit" className="login-btn">
-            Login
-          </button>
-        </form>
+              <div className="form-group remember-me-group">
+                <label htmlFor="rememberMe" className="remember-me-label">
+                  <input
+                    type="checkbox"
+                    id="rememberMe"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="remember-me-checkbox"
+                  />
+                  Remember me
+                </label>
+              </div>
+
+              {error && <span className="error-message">{error}</span>}
+
+              <button type="submit" className="login-btn">
+                Login
+              </button>
+            </form>
+          </>
+        )}
       </div>
     </div>
   );

@@ -99,7 +99,17 @@ function statusIsPresent(status, sessionFilter) {
   return false;
 }
 
-export default function AdminDashboard({ user, onLogout }) {
+export default function AcademicCoordinatorDashboard({ user }) {
+  const router = useRouter();
+
+  // Logout handler for coordinator
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("activeRole");
+    window.location.href = "/";
+  };
+
   // State for change password form
   const [changePasswordMobile, setChangePasswordMobile] = useState("");
   const [changePasswordTeacherInput, setChangePasswordTeacherInput] =
@@ -193,12 +203,12 @@ export default function AdminDashboard({ user, onLogout }) {
       alert("Failed to change password: " + error.message);
     }
   };
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedProgram, setSelectedProgram] = useState("BE");
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [filteredTeachers, setFilteredTeachers] = useState([]);
   const [classes, setClasses] = useState([]);
 
   // State for selected class and class tab
@@ -702,21 +712,39 @@ export default function AdminDashboard({ user, onLogout }) {
     fetchMinAttendanceDate();
   }, []);
 
-  // Fetch departments for selected program
+  // Fetch coordinator's departments from TeacherDepartment
   useEffect(() => {
-    async function fetchDepartments() {
-      const res = await apiCall(`/api/departments?program=${selectedProgram}`);
-      const data = await res.json();
-      if (data.success) {
-        setDepartments(data.departments);
-        setSelectedDepartment(null);
-      } else {
+    async function fetchCoordinatorDepartments() {
+      try {
+        const res = await apiCall(
+          `/api/teacher-departments?teacherId=${user.id}`,
+        );
+        const data = await res.json();
+        if (
+          data.success &&
+          data.departments &&
+          Array.isArray(data.departments)
+        ) {
+          // Extract department objects from TeacherDepartment junction, filter out undefined
+          const depts = data.departments
+            .map((td) => td?.department)
+            .filter((dept) => dept && dept.id); // Ensure department exists and has id
+          setDepartments(depts);
+          setSelectedDepartment(depts.length > 0 ? depts[0] : null);
+        } else {
+          setDepartments([]);
+          setSelectedDepartment(null);
+        }
+      } catch (error) {
+        console.error("Error fetching coordinator departments:", error);
         setDepartments([]);
         setSelectedDepartment(null);
       }
     }
-    fetchDepartments();
-  }, [selectedProgram]);
+    if (user?.id) {
+      fetchCoordinatorDepartments();
+    }
+  }, [user?.id]);
 
   // Fetch classes for selected department
   useEffect(() => {
@@ -764,66 +792,91 @@ export default function AdminDashboard({ user, onLogout }) {
     fetchClassDetails();
   }, [selectedClass]);
 
-  // Fetch teachers
+  // Fetch teachers on mount
   useEffect(() => {
-    async function fetchTeachers() {
-      const res = await apiCall("/api/teachers");
-      const data = await res.json();
-      if (data.success) setTeachers(data.teachers);
+    if (!user?.id) {
+      return;
     }
     fetchTeachers();
-  }, []);
+  }, [user?.id]);
 
-  // Fetch departments for report based on selected program
+  // Filter teachers to show only those who teach classes in coordinator's departments
   useEffect(() => {
-    async function fetchReportDepartments() {
-      let url = "/api/departments";
-      if (reportProgram !== "all") {
-        url += `?program=${reportProgram}`;
+    async function filterTeachersByDepartments() {
+      if (!departments || departments.length === 0) {
+        setFilteredTeachers([]);
+        return;
       }
-      const res = await apiCall(url);
-      const data = await res.json();
-      if (data.success) {
-        setReportDepartments(data.departments);
-        setReportDepartment(null);
-        setReportClass(null);
-      } else {
-        setReportDepartments([]);
-        setReportDepartment(null);
-        setReportClass(null);
+
+      if (!teachers || teachers.length === 0) {
+        setFilteredTeachers([]);
+        return;
+      }
+
+      try {
+        const departmentIds = new Set(departments.map((d) => d.id));
+
+        const filtered = [];
+
+        for (const teacher of teachers) {
+          const res = await apiCall(
+            `/api/class-teachers?teacherId=${teacher.id}`,
+          );
+          const data = await res.json();
+
+          if (
+            data.success &&
+            data.assignments &&
+            Array.isArray(data.assignments)
+          ) {
+            const teachesInDept = data.assignments.some(
+              (a) => a.class && departmentIds.has(a.class.departmentId),
+            );
+
+            if (teachesInDept) {
+              filtered.push(teacher);
+            }
+          }
+        }
+
+        setFilteredTeachers(filtered);
+      } catch (error) {
+        console.error("FILTER: error -", error);
+        setFilteredTeachers([]);
       }
     }
-    fetchReportDepartments();
-  }, [reportProgram]);
 
-  // Fetch departments for dashboard based on selected program
+    filterTeachersByDepartments();
+  }, [departments, teachers]);
+
+  // Set report departments to coordinator's departments
   useEffect(() => {
-    async function fetchDashboardDepartments() {
-      let url = "/api/departments";
-      if (dashboardProgram !== "all") {
-        url += `?program=${dashboardProgram}`;
-      }
-      const res = await apiCall(url);
-      const data = await res.json();
-      if (data.success) {
-        setDashboardDepartments(data.departments);
-        setDashboardDepartment(null);
-        setDashboardClass(null);
-      } else {
-        setDashboardDepartments([]);
-        setDashboardDepartment(null);
-        setDashboardClass(null);
-      }
-    }
-    fetchDashboardDepartments();
-  }, [dashboardProgram]);
+    setReportDepartments(departments);
+    setReportDepartment(null);
+    setReportClass(null);
+  }, [departments]);
+
+  // Set dashboard departments to coordinator's departments
+  useEffect(() => {
+    setDashboardDepartments(departments);
+    setDashboardDepartment(null);
+    setDashboardClass(null);
+  }, [departments]);
 
   // Fetch classes for report filter based on selected department
   useEffect(() => {
     async function fetchClassesForReport() {
+      console.log(
+        "fetchClassesForReport called with reportDepartment:",
+        reportDepartment,
+      );
+      console.log("Available reportDepartments:", reportDepartments);
       let allClasses = [];
       if (reportDepartment) {
         // If a specific department is selected, fetch only its classes
+        console.log(
+          `Fetching classes for department ID ${reportDepartment.id} (${reportDepartment.name})`,
+        );
         const res = await apiCall(
           `/api/classes?departmentId=${reportDepartment.id}`,
         );
@@ -836,7 +889,11 @@ export default function AdminDashboard({ user, onLogout }) {
         }
       } else {
         // If no specific department, fetch all classes for all report departments
+        console.log("Fetching all classes for all reportDepartments");
         for (const dept of reportDepartments) {
+          console.log(
+            `Fetching classes for department ${dept.id} (${dept.name})`,
+          );
           const res = await apiCall(`/api/classes?departmentId=${dept.id}`);
           const data = await res.json();
           if (data.success) {
@@ -847,6 +904,7 @@ export default function AdminDashboard({ user, onLogout }) {
           }
         }
       }
+      console.log("Fetched report classes:", allClasses);
       setReportClasses(allClasses);
       if (reportDepartment && allClasses.length === 0) {
         setReportClass(null);
@@ -937,34 +995,12 @@ export default function AdminDashboard({ user, onLogout }) {
     }
   }, [activeTab, lockClass]);
 
-  // Fetch lock departments based on selected lock program
+  // Use coordinator's departments for lock management
   useEffect(() => {
-    async function fetchLockDeptList() {
-      if (!lockProgram) {
-        setLockDepartments([]);
-        setLockDepartment(null);
-        setLockClass(null);
-        return;
-      }
-      try {
-        let url = "/api/departments";
-        if (lockProgram !== "all") {
-          url += `?program=${lockProgram}`;
-        }
-        const res = await apiCall(url);
-        const data = await res.json();
-        if (data.success) {
-          setLockDepartments(data.departments);
-          setLockDepartment(null);
-          setLockClass(null);
-        }
-      } catch (error) {
-        console.error("Failed to fetch departments:", error);
-        setLockDepartments([]);
-      }
-    }
-    fetchLockDeptList();
-  }, [lockProgram]);
+    setLockDepartments(departments);
+    setLockDepartment(null);
+    setLockClass(null);
+  }, [departments]);
 
   // Fetch lock classes based on selected lock department
   useEffect(() => {
@@ -991,54 +1027,37 @@ export default function AdminDashboard({ user, onLogout }) {
     fetchLockClassList();
   }, [lockDepartment]);
 
-  // Fetch all classes for whole institution lock
+  // Fetch all classes for whole institution lock - for coordinator, fetch only from assigned depts
   useEffect(() => {
     async function fetchAllClasses() {
       if (lockType !== "whole") {
         return;
       }
       try {
-        const res = await apiCall("/api/classes");
-        const data = await res.json();
-        if (data.success) {
-          setLockClasses(data.classes);
+        // For coordinator: fetch classes only from their assigned departments
+        let allClasses = [];
+        for (const dept of lockDepartments) {
+          const res = await apiCall(`/api/classes?departmentId=${dept.id}`);
+          const data = await res.json();
+          if (data.success) {
+            allClasses = [...allClasses, ...data.classes];
+          }
         }
+        setLockClasses(allClasses);
       } catch (error) {
         console.error("Failed to fetch all classes:", error);
         setLockClasses([]);
       }
     }
     fetchAllClasses();
-  }, [lockType]);
+  }, [lockType, lockDepartments]);
 
-  // Fetch holiday lock departments based on selected program
+  // Use coordinator's departments for holiday lock management
   useEffect(() => {
-    async function fetchHolidayLockDeptList() {
-      if (!holidayLockProgram) {
-        setHolidayLockDepartments([]);
-        setHolidayLockDepartment(null);
-        setHolidayLockClass(null);
-        return;
-      }
-      try {
-        const res = await apiCall(
-          holidayLockProgram === "all"
-            ? "/api/departments"
-            : `/api/departments?program=${holidayLockProgram}`,
-        );
-        const data = await res.json();
-        if (data.success) {
-          setHolidayLockDepartments(data.departments);
-          setHolidayLockDepartment(null);
-          setHolidayLockClass(null);
-        }
-      } catch (error) {
-        console.error("Failed to fetch holiday lock departments:", error);
-        setHolidayLockDepartments([]);
-      }
-    }
-    fetchHolidayLockDeptList();
-  }, [holidayLockProgram]);
+    setHolidayLockDepartments(departments);
+    setHolidayLockDepartment(null);
+    setHolidayLockClass(null);
+  }, [departments]);
 
   // Fetch holiday lock classes based on selected department
   useEffect(() => {
@@ -1065,25 +1084,30 @@ export default function AdminDashboard({ user, onLogout }) {
     fetchHolidayLockClassList();
   }, [holidayLockDepartment]);
 
-  // Fetch holiday lock classes for whole institution
+  // Fetch holiday lock classes for whole institution - for coordinator, fetch only from assigned depts
   useEffect(() => {
     async function fetchAllHolidayLockClasses() {
       if (holidayLockType !== "whole") {
         return;
       }
       try {
-        const res = await apiCall("/api/classes");
-        const data = await res.json();
-        if (data.success) {
-          setHolidayLockClasses(data.classes);
+        // For coordinator: fetch classes only from their assigned departments
+        let allClasses = [];
+        for (const dept of holidayLockDepartments) {
+          const res = await apiCall(`/api/classes?departmentId=${dept.id}`);
+          const data = await res.json();
+          if (data.success) {
+            allClasses = [...allClasses, ...data.classes];
+          }
         }
+        setHolidayLockClasses(allClasses);
       } catch (error) {
         console.error("Failed to fetch all holiday lock classes:", error);
         setHolidayLockClasses([]);
       }
     }
     fetchAllHolidayLockClasses();
-  }, [holidayLockType]);
+  }, [holidayLockType, holidayLockDepartments]);
 
   // Fetch holiday locked dates when holiday lock tab or class changes
   useEffect(() => {
@@ -3718,86 +3742,10 @@ export default function AdminDashboard({ user, onLogout }) {
         // Determine which classes to fetch data for based on type
         let classesToFetch = [];
         if (dashboardType === "whole") {
-          // Fetch all classes, optionally filtered by program
-          if (dashboardProgram !== "all") {
-            // If program is selected, fetch departments for that program fresh from API, then their classes
-            const resDepts = await apiCall(
-              `/api/departments?program=${dashboardProgram}`,
-            );
-            const dataDepts = await resDepts.json();
-            let relevantDepts = dataDepts.success ? dataDepts.departments : [];
-
-            // Now fetch classes for all relevant departments in parallel
-            let allClassesForProgram = [];
-            const classPromises = relevantDepts.map((dept) =>
-              apiCall(`/api/classes?departmentId=${dept.id}`).then((res) =>
-                res.json().then((data) =>
-                  data.success
-                    ? data.classes.map((c) => ({
-                        ...c,
-                        departmentId: dept.id,
-                        departmentName: dept.name,
-                        programName: dashboardProgram,
-                      }))
-                    : [],
-                ),
-              ),
-            );
-            const classResults = await Promise.all(classPromises);
-            allClassesForProgram = classResults.flat();
-            classesToFetch = allClassesForProgram;
-          } else {
-            // No program filter - fetch all classes through each program
-            const allPrograms = [
-              { id: 1, name: "BE" },
-              { id: 2, name: "BTech" },
-            ];
-            let allClassesWithMetadata = [];
-
-            // Fetch departments and classes for each program
-            const programPromises = allPrograms.map((prog) =>
-              apiCall(`/api/departments?program=${prog.name}`)
-                .then((res) => res.json())
-                .then((data) => {
-                  if (!data.success || !data.departments) return [];
-                  const depts = data.departments;
-
-                  // Fetch classes for all departments in this program
-                  const classPromises = depts.map((dept) =>
-                    apiCall(`/api/classes?departmentId=${dept.id}`)
-                      .then((res) => res.json())
-                      .then((classData) => {
-                        if (!classData.success || !classData.classes) return [];
-                        return classData.classes.map((c) => ({
-                          ...c,
-                          departmentId: dept.id,
-                          departmentName: dept.name,
-                          programName: prog.name,
-                        }));
-                      })
-                      .catch(() => []),
-                  );
-                  return Promise.all(classPromises);
-                })
-                .then((classResults) => classResults.flat())
-                .catch(() => []),
-            );
-
-            const allResults = await Promise.all(programPromises);
-            allClassesWithMetadata = allResults.flat();
-            classesToFetch = allClassesWithMetadata;
-          }
-        } else if (dashboardType === "program" && dashboardProgram !== "all") {
-          // Fetch departments for the selected program fresh from API, then their classes
-          const resDepts = await apiCall(
-            `/api/departments?program=${dashboardProgram}`,
-          );
-          const dataDepts = await resDepts.json();
-          let relevantDepts = dataDepts.success ? dataDepts.departments : [];
-
-          // Now fetch classes for all relevant departments in parallel
-          let allClassesForProgram = [];
-          const classPromises = relevantDepts.map((dept) =>
+          // For coordinator: fetch all classes from their assigned departments
+          // dashboardDepartments is already filtered to coordinator's departments
+          let allClassesForDepts = [];
+          const classPromises = dashboardDepartments.map((dept) =>
             apiCall(`/api/classes?departmentId=${dept.id}`).then((res) =>
               res.json().then((data) =>
                 data.success
@@ -3805,15 +3753,14 @@ export default function AdminDashboard({ user, onLogout }) {
                       ...c,
                       departmentId: dept.id,
                       departmentName: dept.name,
-                      programName: dashboardProgram,
                     }))
                   : [],
               ),
             ),
           );
           const classResults = await Promise.all(classPromises);
-          allClassesForProgram = classResults.flat();
-          classesToFetch = allClassesForProgram;
+          allClassesForDepts = classResults.flat();
+          classesToFetch = allClassesForDepts;
         } else if (dashboardType === "department" && dashboardDepartment) {
           // Fetch classes for the selected department
           const res = await apiCall(
@@ -4214,10 +4161,10 @@ export default function AdminDashboard({ user, onLogout }) {
       <div className="attendance-card">
         <div className="attendance-header">
           <div>
-            <h1>Administrator Dashboard</h1>
+            <h1>Academic Coordinator Dashboard</h1>
             <p className="teacher-name">Welcome, {user.name}</p>
           </div>
-          <button onClick={onLogout} className="logout-btn">
+          <button onClick={handleLogout} className="logout-btn">
             Logout
           </button>
         </div>
@@ -4429,43 +4376,9 @@ export default function AdminDashboard({ user, onLogout }) {
                     border: "1px solid #ddd",
                   }}
                 >
-                  <option value="whole">Whole Institution</option>
+                  <option value="whole">All Departments</option>
                   <option value="department">By Department</option>
                   <option value="class">By Class</option>
-                </select>
-              </div>
-
-              {/* Program Selector */}
-              <div>
-                <label
-                  style={{
-                    fontWeight: "bold",
-                    display: "block",
-                    marginBottom: "5px",
-                  }}
-                >
-                  Select Program:
-                </label>
-                <select
-                  value={dashboardProgram}
-                  onChange={(e) => {
-                    setDashboardProgram(e.target.value);
-                    setDashboardDepartment(null);
-                    setDashboardClass(null);
-                  }}
-                  style={{
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #ddd",
-                    width: "100%",
-                  }}
-                >
-                  <option value="all">All Programs</option>
-                  {programs.map((program) => (
-                    <option key={program.id} value={program.name}>
-                      {program.name}
-                    </option>
-                  ))}
                 </select>
               </div>
 
@@ -4690,15 +4603,21 @@ export default function AdminDashboard({ user, onLogout }) {
               <div className="departments-nav">
                 <h3>Departments - {selectedProgram}</h3>
                 <div className="department-buttons">
-                  {departments.map((dept) => (
-                    <button
-                      key={dept.id}
-                      className={`dept-btn ${selectedDepartment?.id === dept.id ? "active" : ""}`}
-                      onClick={() => setSelectedDepartment(dept)}
-                    >
-                      {dept.name}
-                    </button>
-                  ))}
+                  {departments
+                    .filter((dept) => {
+                      // Only show departments from the selected program
+                      // dept should have a program property from the API
+                      return dept.program?.name === selectedProgram;
+                    })
+                    .map((dept) => (
+                      <button
+                        key={dept.id}
+                        className={`dept-btn ${selectedDepartment?.id === dept.id ? "active" : ""}`}
+                        onClick={() => setSelectedDepartment(dept)}
+                      >
+                        {dept.name}
+                      </button>
+                    ))}
                 </div>
               </div>
             )}
@@ -4792,7 +4711,7 @@ export default function AdminDashboard({ user, onLogout }) {
                     <div>Action</div>
                   </div>
                   {sortByMatchPosition(
-                    teachers.filter((teacher) => {
+                    filteredTeachers.filter((teacher) => {
                       const search = teacherSearch.toLowerCase();
                       return (
                         teacher.name.toLowerCase().includes(search) ||
@@ -5561,39 +5480,9 @@ export default function AdminDashboard({ user, onLogout }) {
                       border: "1px solid #ddd",
                     }}
                   >
-                    <option value="whole">Whole Institution</option>
+                    <option value="whole">All Departments</option>
                     <option value="department">By Department</option>
                     <option value="class">By Class</option>
-                  </select>
-                </div>
-
-                {/* Program Selector */}
-                <div>
-                  <label
-                    style={{
-                      fontWeight: "bold",
-                      display: "block",
-                      marginBottom: "5px",
-                    }}
-                  >
-                    Select Program:
-                  </label>
-                  <select
-                    value={reportProgram}
-                    onChange={(e) => setReportProgram(e.target.value)}
-                    style={{
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #ddd",
-                      width: "100%",
-                    }}
-                  >
-                    <option value="all">All Programs</option>
-                    {programs.map((prog) => (
-                      <option key={prog.id} value={prog.name}>
-                        {prog.name}
-                      </option>
-                    ))}
                   </select>
                 </div>
 
@@ -5880,86 +5769,51 @@ export default function AdminDashboard({ user, onLogout }) {
                         width: "100%",
                       }}
                     >
-                      <option value="whole">Whole Institution</option>
+                      <option value="whole">All Departments</option>
                       <option value="department">By Department</option>
                       <option value="class">By Class</option>
                     </select>
                   </div>
 
-                  {/* Program Selector */}
-                  <div>
-                    <label
-                      style={{
-                        fontWeight: "bold",
-                        display: "block",
-                        marginBottom: "5px",
-                      }}
-                    >
-                      Select Program:
-                    </label>
-                    <select
-                      value={lockProgram || "all"}
-                      onChange={(e) => {
-                        setLockProgram(e.target.value);
-                        setLockDepartment(null);
-                        setLockClass(null);
-                      }}
-                      style={{
-                        padding: "8px",
-                        borderRadius: "4px",
-                        border: "1px solid #ddd",
-                        width: "100%",
-                      }}
-                    >
-                      <option value="all">All Programs</option>
-                      {programs.map((prog) => (
-                        <option key={prog.id} value={prog.name}>
-                          {prog.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
                   {/* Department Selector - shows for department and class types */}
-                  {(lockType === "department" || lockType === "class") &&
-                    lockProgram && (
-                      <div>
-                        <label
-                          style={{
-                            fontWeight: "bold",
-                            display: "block",
-                            marginBottom: "5px",
-                          }}
-                        >
-                          Select Department:
-                        </label>
-                        <select
-                          value={lockDepartment?.id || ""}
-                          onChange={(e) => {
-                            const dept = lockDepartments.find(
-                              (d) => d.id === parseInt(e.target.value),
-                            );
-                            setLockDepartment(dept || null);
-                            if (lockType === "class") {
-                              setLockClass(null);
-                            }
-                          }}
-                          style={{
-                            padding: "8px",
-                            borderRadius: "4px",
-                            border: "1px solid #ddd",
-                            width: "100%",
-                          }}
-                        >
-                          <option value="">-- Select Department --</option>
-                          {lockDepartments.map((dept) => (
-                            <option key={dept.id} value={dept.id}>
-                              {dept.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
+                  {(lockType === "department" || lockType === "class") && (
+                    <div>
+                      <label
+                        style={{
+                          fontWeight: "bold",
+                          display: "block",
+                          marginBottom: "5px",
+                        }}
+                      >
+                        Select Department:
+                      </label>
+                      <select
+                        value={lockDepartment?.id || ""}
+                        onChange={(e) => {
+                          const dept = lockDepartments.find(
+                            (d) => d.id === parseInt(e.target.value),
+                          );
+                          setLockDepartment(dept || null);
+                          if (lockType === "class") {
+                            setLockClass(null);
+                          }
+                        }}
+                        style={{
+                          padding: "8px",
+                          borderRadius: "4px",
+                          border: "1px solid #ddd",
+                          width: "100%",
+                        }}
+                      >
+                        <option value="">-- Select Department --</option>
+                        {lockDepartments.map((dept) => (
+                          <option key={dept.id} value={dept.id}>
+                            {dept.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {/* Class Selector - only shows when type is class and department is selected */}
                   {lockType === "class" && lockDepartment && (
@@ -6322,43 +6176,9 @@ export default function AdminDashboard({ user, onLogout }) {
                           width: "100%",
                         }}
                       >
-                        <option value="whole">Whole Institution</option>
+                        <option value="whole">All Departments</option>
                         <option value="department">By Department</option>
                         <option value="class">By Class</option>
-                      </select>
-                    </div>
-
-                    {/* Program Selector */}
-                    <div>
-                      <label
-                        style={{
-                          fontWeight: "bold",
-                          display: "block",
-                          marginBottom: "5px",
-                        }}
-                      >
-                        Select Program:
-                      </label>
-                      <select
-                        value={holidayLockProgram || "all"}
-                        onChange={(e) => {
-                          setHolidayLockProgram(e.target.value);
-                          setHolidayLockDepartment(null);
-                          setHolidayLockClass(null);
-                        }}
-                        style={{
-                          padding: "8px",
-                          borderRadius: "4px",
-                          border: "1px solid #ddd",
-                          width: "100%",
-                        }}
-                      >
-                        <option value="all">All Programs</option>
-                        {programs.map((prog) => (
-                          <option key={prog.id} value={prog.name}>
-                            {prog.name}
-                          </option>
-                        ))}
                       </select>
                     </div>
 

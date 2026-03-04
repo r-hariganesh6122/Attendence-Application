@@ -17,12 +17,17 @@ export async function POST(request) {
       );
     }
 
-    // Check authorization - only teacher and admin can mark attendance
-    if (user.role !== "teacher" && user.role !== "admin") {
+    // Check authorization - only teacher, admin, and academic_coordinator can mark attendance
+    if (
+      user.role !== "teacher" &&
+      user.role !== "admin" &&
+      user.role !== "academic_coordinator"
+    ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Forbidden - Only teachers and admins can mark attendance",
+          message:
+            "Forbidden - Only teachers, coordinators and admins can mark attendance",
         },
         { status: 403 },
       );
@@ -46,6 +51,27 @@ export async function POST(request) {
         { success: false, message: "classId must be an integer" },
         { status: 400 },
       );
+    }
+
+    // Check department access for academic coordinators
+    if (user.role === "academic_coordinator" && user.coordinatorDepartmentId) {
+      const classData = await prisma.class.findUnique({
+        where: { id: classId },
+        select: { departmentId: true },
+      });
+
+      if (
+        !classData ||
+        classData.departmentId !== user.coordinatorDepartmentId
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Forbidden - No access to this class",
+          },
+          { status: 403 },
+        );
+      }
     }
 
     // Check if attendance is locked for this date

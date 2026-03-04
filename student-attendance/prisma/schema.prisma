@@ -19,6 +19,9 @@ model Department {
   programId Int
   program   Program   @relation(fields: [programId], references: [id])
   classes   Class[]
+  teachers  TeacherDepartment[]
+  // Academic coordinators managing this department
+  academicCoordinators User[] @relation("AcademicCoordinators")
   @@unique([name, programId])
 }
 
@@ -57,11 +60,31 @@ model User {
   mobile       String  @unique
   password     String? // Deprecated - use passwordHash instead
   passwordHash String? // Bcrypt hashed password
-  role         String  // 'admin', 'teacher', 'student'
+  role         String  // 'admin', 'teacher', 'student', 'academic_coordinator'
+  // For academic coordinators: ID of the department they manage
+  coordinatorDepartmentId Int?
+  coordinatorDepartment Department? @relation("AcademicCoordinators", fields: [coordinatorDepartmentId], references: [id])
+  
   classTeachers ClassTeacher[]
   attendanceLocks AttendanceLock[]
   holidayLocks    HolidayLock[] @relation("HolidayLocks")
+  // For teachers: departments they teach in
+  teacherDepartments TeacherDepartment[]
 }
+
+// Junction table for teacher-department relationships
+// Tracks which departments teachers teach in
+model TeacherDepartment {
+  id            Int     @id @default(autoincrement())
+  teacherId     Int
+  departmentId  Int
+  
+  teacher       User       @relation(fields: [teacherId], references: [id])
+  department    Department @relation(fields: [departmentId], references: [id])
+  
+  @@unique([teacherId, departmentId])
+}
+
 // Join table for teachers assigned to classes with subjects
 model ClassTeacher {
   id         Int    @id @default(autoincrement())

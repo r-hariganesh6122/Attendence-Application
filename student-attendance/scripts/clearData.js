@@ -22,6 +22,9 @@ async function clearAllData() {
     await prisma.classTeacher.deleteMany();
     console.log("✓ Cleared class-teacher associations");
 
+    await prisma.teacherDepartment.deleteMany();
+    console.log("✓ Cleared teacher-department associations");
+
     // Try to clear courses (may not exist if migrations haven't been run)
     try {
       await prisma.course.deleteMany();

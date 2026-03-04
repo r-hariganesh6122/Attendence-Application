@@ -21,12 +21,13 @@ export async function POST(request) {
       );
     }
 
-    // Check authorization - only admin can create teachers
-    if (user.role !== "admin") {
+    // Check authorization - only admin and academic_coordinator can create teachers
+    if (user.role !== "admin" && user.role !== "academic_coordinator") {
       return NextResponse.json(
         {
           success: false,
-          message: "Forbidden - Only admins can create teachers",
+          message:
+            "Forbidden - Only admins and academic coordinators can create teachers",
         },
         { status: 403 },
       );
@@ -242,12 +243,13 @@ export async function DELETE(request) {
       );
     }
 
-    // Check authorization - only admin can delete teachers
-    if (user.role !== "admin") {
+    // Check authorization - only admin and academic_coordinator can delete teachers
+    if (user.role !== "admin" && user.role !== "academic_coordinator") {
       return NextResponse.json(
         {
           success: false,
-          message: "Forbidden - Only admins can delete teachers",
+          message:
+            "Forbidden - Only admins and academic coordinators can delete teachers",
         },
         { status: 403 },
       );
@@ -311,8 +313,54 @@ export async function DELETE(request) {
 
 export async function GET(request) {
   try {
+    // Authenticate request
+    const user = await authenticateRequest(request);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized - Invalid or missing token" },
+        { status: 401 },
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const classId = searchParams.get("classId");
+    const mobile = searchParams.get("mobile");
+
+    // If fetching password for a specific teacher by mobile
+    if (mobile) {
+      // Only admin and academic coordinators can view teacher passwords
+      if (user.role !== "admin" && user.role !== "academic_coordinator") {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Unauthorized - Cannot view teacher password",
+          },
+          { status: 403 },
+        );
+      }
+
+      const teacher = await prisma.user.findUnique({
+        where: { mobile },
+        select: {
+          id: true,
+          name: true,
+          mobile: true,
+          password: true, // Return plaintext password
+        },
+      });
+
+      if (!teacher) {
+        return NextResponse.json(
+          { success: false, message: "Teacher not found" },
+          { status: 404 },
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        password: teacher.password || "Not available",
+      });
+    }
 
     if (classId) {
       // Fetch teachers for a specific class with course details
@@ -349,9 +397,64 @@ export async function GET(request) {
 
       return NextResponse.json({ success: true, teachers });
     } else {
-      // Fetch all teachers
+      // Fetch all teachers - with department filtering for academic coordinators
+      let whereCondition = { role: "teacher" };
+
+      // Academic coordinators can only see teachers in their departments
+      if (user.role === "academic_coordinator") {
+        // First, fetch the coordinator's assigned departments from TeacherDepartment
+        const coordinatorDepartments = await prisma.teacherDepartment.findMany({
+          where: { teacherId: user.id },
+          select: { departmentId: true },
+        });
+
+        const coordinatorDeptIds = coordinatorDepartments.map(
+          (td) => td.departmentId,
+        );
+
+        if (coordinatorDeptIds.length === 0) {
+          // No departments assigned, return empty
+          return NextResponse.json({ success: true, teachers: [] });
+        }
+
+        // Fetch all teachers, then filter by those who teach in coordinator's departments
+        const allTeachers = await prisma.user.findMany({
+          where: whereCondition,
+          select: {
+            id: true,
+            name: true,
+            mobile: true,
+            classTeachers: {
+              select: {
+                class: {
+                  select: {
+                    departmentId: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        // Filter teachers that teach in any of the coordinator's departments
+        const filteredTeachers = allTeachers
+          .filter((teacher) =>
+            teacher.classTeachers.some((ct) =>
+              coordinatorDeptIds.includes(ct.class.departmentId),
+            ),
+          )
+          .map((t) => ({
+            id: t.id,
+            name: t.name,
+            mobile: t.mobile,
+          }));
+
+        return NextResponse.json({ success: true, teachers: filteredTeachers });
+      }
+
+      // Admin and teachers see all teachers
       const teachers = await prisma.user.findMany({
-        where: { role: "teacher" },
+        where: whereCondition,
         select: {
           id: true,
           name: true,

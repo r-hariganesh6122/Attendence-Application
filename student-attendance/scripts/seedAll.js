@@ -5,6 +5,7 @@ const seedDepartmentsAndClasses = require("./seedDepartmentsAndClasses");
 const assignDefaultTeacherToAllClasses = require("./assignDefaultTeacherToAllClasses");
 const importTeachers = require("./importTeachers");
 const importStudents = require("./importStudents");
+const importAcademicCoordinators = require("./importAcademicCoordinators");
 const seedAttendance = require("./seedAttendance");
 const seedSpecialHolidays = require("./seedSpecialHolidays");
 const hashExistingPasswords = require("./hashExistingPasswords");
@@ -17,6 +18,7 @@ async function runAllSeeds() {
     await assignDefaultTeacherToAllClasses();
     await importTeachers();
     await importStudents();
+    await importAcademicCoordinators();
     await seedAttendance();
     await seedSpecialHolidays();
     await hashExistingPasswords();

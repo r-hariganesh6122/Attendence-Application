@@ -14,17 +14,32 @@ export async function GET(request) {
         { status: 400 },
       );
     }
-    // Find all classes taught by this teacher using ClassTeacher join table
-    const classTeachers = await prisma.classTeacher.findMany({
+    // Find all departments assigned to this teacher (Academic Coordinator)
+    const teacherDepartments = await prisma.teacherDepartment.findMany({
       where: { teacherId: Number(teacherId) },
-      include: { class: true },
+      include: {
+        department: {
+          include: { program: true },
+        },
+      },
     });
-    const classes = classTeachers.map((ct) => ({
-      id: ct.class.id,
-      name: ct.class.name,
+
+    console.log(
+      `TeacherDepartment for teacherId ${teacherId}:`,
+      teacherDepartments,
+    );
+
+    // Return departments
+    const departments = teacherDepartments.map((td) => ({
+      ...td,
+      department: td.department,
     }));
-    return NextResponse.json({ success: true, departments: classes });
+
+    console.log(`Returning departments:`, departments);
+
+    return NextResponse.json({ success: true, departments });
   } catch (error) {
+    console.error("Error fetching teacher departments:", error);
     return NextResponse.json(
       { success: false, message: "Failed to fetch departments" },
       { status: 500 },

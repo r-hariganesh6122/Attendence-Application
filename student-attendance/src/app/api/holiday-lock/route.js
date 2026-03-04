@@ -111,7 +111,12 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const user = await authenticateRequest(request);
-    if (!user || (user.role !== "admin" && user.role !== "teacher")) {
+    if (
+      !user ||
+      (user.role !== "admin" &&
+        user.role !== "teacher" &&
+        user.role !== "academic_coordinator")
+    ) {
       return NextResponse.json(
         { success: false, message: "Unauthorized" },
         { status: 403 },
@@ -168,7 +173,12 @@ export async function POST(request) {
 export async function PUT(request) {
   try {
     const user = await authenticateRequest(request);
-    if (!user || (user.role !== "admin" && user.role !== "teacher")) {
+    if (
+      !user ||
+      (user.role !== "admin" &&
+        user.role !== "teacher" &&
+        user.role !== "academic_coordinator")
+    ) {
       return NextResponse.json(
         { success: false, message: "Unauthorized" },
         { status: 403 },
@@ -219,7 +229,12 @@ export async function PUT(request) {
 export async function DELETE(request) {
   try {
     const user = await authenticateRequest(request);
-    if (!user || (user.role !== "admin" && user.role !== "teacher")) {
+    if (
+      !user ||
+      (user.role !== "admin" &&
+        user.role !== "teacher" &&
+        user.role !== "academic_coordinator")
+    ) {
       return NextResponse.json(
         { success: false, message: "Unauthorized" },
         { status: 403 },

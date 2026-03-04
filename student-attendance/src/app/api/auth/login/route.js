@@ -34,8 +34,12 @@ export async function POST(request) {
       );
     }
 
-    // Only allow admin/teacher login
-    if (user.role !== "admin" && user.role !== "teacher") {
+    // Only allow admin/teacher/academic_coordinator login
+    if (
+      user.role !== "admin" &&
+      user.role !== "teacher" &&
+      user.role !== "academic_coordinator"
+    ) {
       return NextResponse.json(
         { success: false, message: "Login not allowed for your role" },
         { status: 403 },
